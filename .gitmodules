@@ -1,0 +1,6 @@
+[submodule "enfield/tools"]
+	path = enfield/tools
+	url = https://github.com/tim42/tools
+[submodule "enfield/persistence"]
+	path = enfield/persistence
+	url = https://github.com/tim42/persistence
