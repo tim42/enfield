@@ -11,5 +11,8 @@
 
 int main(int, char **)
 {
+  neam::enfield::database<neam::enfield::default_database_conf> db;
+  auto entity = db.create_entity();
+
   return 0;
 }

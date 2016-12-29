@@ -70,7 +70,7 @@ namespace neam
           uint64_t component_types[DatabaseConf::max_component_types / (sizeof(uint64_t) * 8)] = {0};
 
           /// \brief The list of attached_objects this entity have
-          std::unordered_map<type_t, base_t *> attached_objects;
+          std::unordered_map<type_t, base_t *> attached_objects = std::unordered_map<type_t, base_t *>();
 
           entity *owner = nullptr;
 
@@ -232,8 +232,8 @@ namespace neam
         }
 
       private:
-        data_t *data = nullptr;
         database_t *db = nullptr;
+        data_t *data = nullptr;
 
         friend class database<DatabaseConf>;
         friend class attached_object::base<DatabaseConf>;

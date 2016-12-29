@@ -39,12 +39,13 @@ namespace neam
 {
   namespace enfield
   {
+    /// \brief 
     struct default_database_conf
     {
       struct attached_object_class {};
       struct attached_object_type {};
 
-      uint64_t max_component_types = 2 * 64;
+      static constexpr uint64_t max_component_types = 2 * 64;
     };
 
     /// \brief Where components are stored
@@ -158,11 +159,11 @@ namespace neam
           std::vector<base_t *> to_remove;
           for (auto &it : data->attached_objects)
           {
-            if (it->second.required_by.empty())
-              to_remove.push_back(it->second);
+            if (it.second->required_by.empty())
+              to_remove.push_back(it.second);
           }
           for (auto &it : to_remove)
-            remove_ao_user(it, data);
+            remove_ao_user(data, it);
 
           // This error mostly tells you that you have dependency cycles in your attached objects.
           // You can put a breakpoint here and look at what is inside the attached_objects vector.
