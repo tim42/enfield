@@ -1,12 +1,14 @@
 
 
-Enfield: C++14 EWS [Entity Whatever System] thingy.
+Enfield: C++14 EWS `[Entity Whatever System]` thingy.
 
-This includes ECS [entity component system], ECCS/E2CS/EC²S [entity component concept system], ...
+This includes ECS `[entity component system]`, ECCS/E2CS/EC²S `[entity component concept system]`, ...
 
 ---
+
 This project is under development, and can't be used in any kind of project.
 Yet.
+
 
 ---
 
