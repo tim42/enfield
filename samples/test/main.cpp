@@ -6,6 +6,8 @@
 
 #include <enfield/tools/logger/logger.hpp>
 
+#include <enfield/enfield.hpp>
+
 
 int main(int, char **)
 {

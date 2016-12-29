@@ -1,9 +1,9 @@
 //
-// file : enfield.hpp
-// in : file:///home/tim/projects/enfield/enfield/enfield.hpp
+// file : component_type.cpp
+// in : file:///home/tim/projects/enfield/enfield/component_type.cpp
 //
 // created by : Timothée Feuillet
-// date: Mon Dec 26 2016 14:03:18 GMT-0500 (EST)
+// date: Mon Dec 26 2016 15:38:55 GMT-0500 (EST)
 //
 //
 // Copyright (c) 2016 Timothée Feuillet
@@ -27,20 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_66023502427817558_330010620_ENFIELD_HPP__
-#define __N_66023502427817558_330010620_ENFIELD_HPP__
+#include "type_id.hpp"
+#include "enfield_exception.hpp"
 
-#include "entity.hpp"
-#include "database.hpp"
 
-#include "component/component.hpp"
-
-namespace neam
-{
-  namespace enfield
-  {
-  } // namespace enfield
-} // namespace neam
-
-#endif // __N_66023502427817558_330010620_ENFIELD_HPP__
 

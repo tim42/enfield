@@ -1,9 +1,9 @@
 //
-// file : enfield.hpp
-// in : file:///home/tim/projects/enfield/enfield/enfield.hpp
+// file : enfield_logger.hpp
+// in : file:///home/tim/projects/enfield/enfield/enfield_logger.hpp
 //
 // created by : Timothée Feuillet
-// date: Mon Dec 26 2016 14:03:18 GMT-0500 (EST)
+// date: Sat Apr 23 2016 15:59:09 GMT+0200 (CEST)
 //
 //
 // Copyright (c) 2016 Timothée Feuillet
@@ -27,20 +27,18 @@
 // SOFTWARE.
 //
 
-#ifndef __N_66023502427817558_330010620_ENFIELD_HPP__
-#define __N_66023502427817558_330010620_ENFIELD_HPP__
+#ifndef __N_2157120580611224779_2842314943_ENFIELD_LOGGER_HPP__
+#define __N_2157120580611224779_2842314943_ENFIELD_LOGGER_HPP__
 
-#include "entity.hpp"
-#include "database.hpp"
+#ifndef ENFIELD_NO_MESSAGES
+#include "tools/logger/logger.hpp"
 
-#include "component/component.hpp"
+#define ENFIELD_LOG(type, ...)   neam::cr::out.type() << LOGGER_INFO << __VA_ARGS__;
+#define ENFIELD_LOG_TPL(type, file, line, ...)   neam::cr::out.type() << LOGGER_INFO_TPL(file, line) << __VA_ARGS__;
 
-namespace neam
-{
-  namespace enfield
-  {
-  } // namespace enfield
-} // namespace neam
+#else
+#define ENFIELD_LOG(type, ...) // NO LOGS
+#endif
 
-#endif // __N_66023502427817558_330010620_ENFIELD_HPP__
+#endif // __N_2157120580611224779_2842314943_ENFIELD_LOGGER_HPP__
 

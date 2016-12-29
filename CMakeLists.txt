@@ -83,5 +83,3 @@ endif()
 #   add_subdirectory(tools)
 # endif()
 
-# copy
-file(COPY ./data DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)

@@ -1,9 +1,9 @@
 //
-// file : enfield.hpp
-// in : file:///home/tim/projects/enfield/enfield/enfield.hpp
+// file : enfield_types.hpp
+// in : file:///home/tim/projects/enfield/enfield/enfield_types.hpp
 //
 // created by : Timothée Feuillet
-// date: Mon Dec 26 2016 14:03:18 GMT-0500 (EST)
+// date: Mon Dec 26 2016 16:07:41 GMT-0500 (EST)
 //
 //
 // Copyright (c) 2016 Timothée Feuillet
@@ -27,20 +27,23 @@
 // SOFTWARE.
 //
 
-#ifndef __N_66023502427817558_330010620_ENFIELD_HPP__
-#define __N_66023502427817558_330010620_ENFIELD_HPP__
+#ifndef __N_2187426866142131074_2264321372_ENFIELD_TYPES_HPP__
+#define __N_2187426866142131074_2264321372_ENFIELD_TYPES_HPP__
 
-#include "entity.hpp"
-#include "database.hpp"
-
-#include "component/component.hpp"
+#include <cstdint>
+#include <cstddef>
 
 namespace neam
 {
   namespace enfield
   {
+    /// \brief Alias for a type identifier
+    using type_t = uint32_t;
+
+    /// \brief A generic identifier (must be the double of the type_t size)
+    using id_t = uint64_t;
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_66023502427817558_330010620_ENFIELD_HPP__
+#endif // __N_2187426866142131074_2264321372_ENFIELD_TYPES_HPP__
 

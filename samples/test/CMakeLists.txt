@@ -22,10 +22,7 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PROJ_FLAGS}")
 add_executable(${SAMPLE_NAME} ${srcs})
 
 target_link_libraries(${SAMPLE_NAME} ${PROJ_DEPS_LIBS})
-target_link_libraries(${SAMPLE_NAME} ${GLFW_LIBRARY})
-target_link_libraries(${SAMPLE_NAME} ${LODEPNG_LIBRARY})
+target_link_libraries(${SAMPLE_NAME} ${PROJ_APP})
 target_link_libraries(${SAMPLE_NAME} ${libntools})
 
-
-# target_link_libraries(${SAMPLE_NAME} ${PROJ_APP})
 
