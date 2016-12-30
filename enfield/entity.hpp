@@ -35,9 +35,10 @@
 
 #include "enfield_types.hpp"
 #include "enfield_exception.hpp"
+#include "database_conf.hpp"
 
 #include "type_id.hpp"
-#include "base_entity_attached_object.hpp"
+#include "internal_base_attached_object.hpp"
 
 namespace neam
 {
@@ -60,6 +61,15 @@ namespace neam
         /// \brief The data of the entity itself isn't held by the instance of the entity, but lives in the DB
         struct data_t
         {
+          data_t (id_t _entity_id, database_t *_db) : entity_id(_entity_id), db(_db) {}
+          data_t(data_t&&) = default;
+          ~data_t() = default;
+
+          data_t() = delete;
+          data_t(const data_t&) = delete;
+          data_t &operator = (const data_t&) = delete;
+          data_t &operator = (data_t&&) = delete;
+
           /// \brief Local id of the entity (local = not networked)
           /// This identifier is used to identify the entity in the DB
           const id_t entity_id = ~0u;
@@ -88,7 +98,7 @@ namespace neam
             for (type_t i = 0; i < DatabaseConf::max_component_types; ++i)
             {
               const uint32_t index = i / (sizeof(uint64_t) * 8);
-              const uint64_t mask = 1u << (i % (sizeof(uint64_t) * 8));
+              const uint64_t mask = 1ul << (i % (sizeof(uint64_t) * 8));
               if ((!!(component_types[index] & mask)) != (!!attached_objects.count(i)))
                 return false;
             }
@@ -99,7 +109,18 @@ namespace neam
           /// \brief Throw an exception if the entity state is invalid
           void throw_validate() const
           {
-            check::on_error::n_assert(validate(), "Entity is in invalid state");
+            check::on_error::n_assert(attached_objects.size() < DatabaseConf::max_component_types, "Entity is in invalid state");
+            check::on_error::n_assert(owner != nullptr, "Entity is in invalid state");
+            check::on_error::n_assert(this == owner->data, "Entity is in invalid state");
+
+            // loop over component_types
+            for (type_t i = 0; i < DatabaseConf::max_component_types; ++i)
+            {
+              const uint32_t index = i / (sizeof(uint64_t) * 8);
+              const uint64_t mask = 1ul << (i % (sizeof(uint64_t) * 8));
+
+              check::on_error::n_assert((!!(component_types[index] & mask)) == (!!attached_objects.count(i)), "Entity is in invalid state");
+            }
           }
         };
 
@@ -159,9 +180,11 @@ namespace neam
         /// \note if an attached object of the same type has already been user-created, an exception is thrown
         /// \note you can't add views
         /// \see has()
-        template<typename AttachedObject, typename DataProvider>
-        AttachedObject &add(DataProvider *provider = nullptr)
+        template<typename AttachedObject, typename... DataProvider>
+        AttachedObject &add(DataProvider *...provider)
         {
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_creatable>();
+
           if (has<AttachedObject>())
           {
             AttachedObject *ret = get<AttachedObject>();
@@ -173,7 +196,7 @@ namespace neam
             return *ret;
           }
 
-          return db->template add_ao_user<AttachedObject, DataProvider>(data, provider);
+          return db->template add_ao_user<AttachedObject, DataProvider...>(data, provider...);
         }
 
         /// \brief Remove an attached object
@@ -181,6 +204,8 @@ namespace neam
         template<typename AttachedObject>
         void remove()
         {
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_removable>();
+
           if (!has<AttachedObject>())
             return;
           db->template remove_ao_user<AttachedObject>(data);
@@ -192,9 +217,11 @@ namespace neam
         template<typename AttachedObject>
         AttachedObject *get()
         {
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+
           if (!has<AttachedObject>())
             return nullptr;
-          return &data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id];
+          return static_cast<AttachedObject*>(data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
         }
 
         /// \brief Return an attached object.
@@ -203,9 +230,11 @@ namespace neam
         template<typename AttachedObject>
         const AttachedObject *get() const
         {
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+
           if (!has<AttachedObject>())
             return nullptr;
-          return &data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id];
+          return static_cast<const AttachedObject*>(data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
         }
 
         /// \brief Return true if the entity has an attached object of that type
@@ -213,9 +242,11 @@ namespace neam
         template<typename AttachedObject>
         bool has() const
         {
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+
           const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
           const uint32_t index = id / (sizeof(uint64_t) * 8);
-          const uint64_t mask = id % (sizeof(uint64_t) * 8);
+          const uint64_t mask = 1ul << (id % (sizeof(uint64_t) * 8));
           return (data->component_types[index] & mask) != 0;
         }
 

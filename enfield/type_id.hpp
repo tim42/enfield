@@ -48,7 +48,7 @@ namespace neam
           /// \brief Return the next id
           static type_t get_next_id()
           {
-            check::on_error::n_assert(counter != ~0u, "neam::enfield::type_id<>: more than 2^32 identifiers have been generated");
+//             check::on_error::n_assert(counter != 0, "neam::enfield::type_id<>: more than 2^32 identifiers have been generated");
             return ++counter;
           }
 
@@ -56,7 +56,7 @@ namespace neam
           static type_t counter;
       };
       template<typename Class>
-      type_t type_id_base<Class>::counter = 0;
+      type_t type_id_base<Class>::counter = 1;
     } // namespace internal
 
     /// \brief Generate a unique identifier (at runtime) for a given type.

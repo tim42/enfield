@@ -57,80 +57,17 @@ namespace neam
           using entity_data_t = typename entity<DatabaseConf>::data_t;
           using database_t = database<DatabaseConf>;
 
-        protected:
+        private:
           base(entity_t **_owner, type_t _object_type_id, type_t _class_id)
-            : owner((*_owner)->data), object_type_id(_object_type_id), class_id(_class_id) {};
+            : object_type_id(_object_type_id), class_id(_class_id), owner((*_owner)->data) {};
+
+        protected:
           virtual ~base()
           {
             check::on_error::n_assert(authorized_destruction, "Trying to destroy an attached object in an unauthorized fashion");
             check::on_error::n_assert(required_by.empty(), "Trying to destroy an attached object when other attached objects require it");
             check::on_error::n_assert(requires.empty(), "Trying to destroy an attached object that hasn't been properly cleaned-up (still some dependency)");
-            check::on_error::n_assert(user_added, "Trying to destroy an attached object when only the user may remove it (it has been flagged as user-added)");
-          }
-
-          /// \brief Require another (requireable) attached object
-          /// \note circular dependencies will not be tested when calling that function but will trigger an exception when
-          ///       trying to destruct the entity. Also, circular dependencies may lead to segfaults/memory corruption
-          ///       as the returned object will not be fully constructed (in case of circular dependencies).
-          ///
-          /// Required attached objects will be destructed after the last attached object requiring them has been destructed.
-          template<typename AttachedObject, typename DataProvider>
-          AttachedObject &require(DataProvider *provider)
-          {
-            return owner->db->add_ao_dep(owner, this, provider);
-          }
-
-          /// \brief Require another (requireable) attached object
-          /// \note circular dependencies will not be tested when calling that function but will trigger an exception when
-          ///       trying to destruct the entity. Also, circular dependencies may lead to segfaults/memory corruption
-          ///       as the returned object will not be fully constructed (in case of circular dependencies).
-          ///
-          /// Required attached objects will be destructed after the last attached object requiring them has been destructed.
-          template<typename AttachedObject>
-          AttachedObject &require()
-          {
-            return owner->db->add_ao_dep(owner, this);
-          }
-
-
-          /// \brief Return a required attached object. If the object to be returned
-          /// either does not exists or has not been required then that function will throw.
-          template<typename AttachedObject>
-          AttachedObject &get_required()
-          {
-            AttachedObject *ret = get_unsafe();
-            check::on_error::n_assert(ret != nullptr, "The attached object required does not exists");
-            base *bptr = ret;
-            check::on_error::n_assert(requires.count(bptr), "The attached object to be returned has not been required");
-
-            return *ret;
-          }
-
-          template<typename AttachedObject>
-          const AttachedObject &get_required() const
-          {
-            AttachedObject *ret = get_unsafe();
-            check::on_error::n_assert(ret != nullptr, "The attached object required does not exists");
-            base *bptr = ret;
-            check::on_error::n_assert(requires.count(bptr), "The attached object to be returned has not been required");
-
-            return *ret;
-          }
-
-          /// \brief Return a pointer to a possibly non-required attached object.
-          /// This is unsafe because there is no guarantee that the returned pointer will be valid:
-          /// another thread may remove the returned object at any time. (except if the returned object is one of the required objects)
-          /// \note some kind of attached objects (like concepts) can only be retrieved by get_unsafe() as they can't be required.
-          template<typename AttachedObject>
-          AttachedObject *get_unsafe()
-          {
-            return owner->owner->template get<AttachedObject>();
-          }
-
-          template<typename AttachedObject>
-          const AttachedObject *get_unsafe() const
-          {
-            return owner->owner->template get<AttachedObject>();
+            check::on_error::n_assert(!user_added, "Trying to destroy an attached object when only the user may remove it (it has been flagged as user-added)");
           }
 
           /// \brief Self destruct the attached object.
@@ -167,6 +104,9 @@ namespace neam
 
           friend class neam::enfield::database<DatabaseConf>;
           friend class neam::enfield::entity<DatabaseConf>;
+
+          template<typename DBC, typename AttachedObjectClass>
+          friend class base_tpl;
       };
     } // namespace attached_object
   } // namespace enfield
