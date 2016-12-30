@@ -31,6 +31,7 @@
 #define __N_3158130790807728943_2877410136_DATABASE_HPP__
 
 #include <unordered_set>
+#include <algorithm>
 
 #include "enfield_types.hpp"
 #include "database_conf.hpp"
@@ -48,46 +49,11 @@ namespace neam
 
     static constexpr long poisoned_pointer = (~static_cast<long>(0xDEADBEEF));
 
-    /// \brief The default DB configuration.
-    /// A DB configuration allow a fine grained configuration over what is permitted:
-    ///   - what kind of "attached objects" classes an entity can have (components, concepts, ...)
-    ///   - what are the specifc access rights of a given attached object class
-    struct default_database_conf
+    /// \brief Different possibilities for filtering queries
+    enum class query_condition
     {
-      // type markers (mandatory)
-      struct attached_object_class;
-      struct attached_object_type;
-
-      // allowed attached object classes (the constexpr type_t id is mandatory):
-      struct component_class { static constexpr type_t id = 0; };
-      struct concept_class { static constexpr type_t id = 1; };
-
-      // "rights" configuration:
-      template<type_t ClassId>
-      struct class_rights
-      {
-        // default configuration: (must be static constexpr)
-
-        /// \brief Define general access rights
-        static constexpr attached_object_access access = attached_object_access::all;
-      };
-
-      /// \brief Specify the rights of OtherClassId over ClassId.
-      /// In this mode, only attached_object_access::ao_* are accounted
-      /// the default is to use the class_rights.
-      template<type_t ClassId, type_t OtherClassId>
-      struct specific_class_rights : public class_rights<ClassId> {};
-
-      /// \brief The maximum number of components
-      static constexpr uint64_t max_component_types = 2 * 64;
-    };
-    template<>
-    struct default_database_conf::class_rights<default_database_conf::concept_class::id>
-    {
-      // specific configuration: (must be static constexpr)
-
-      /// \brief Define general access rights
-      static constexpr attached_object_access access = attached_object_access::automanaged | attached_object_access::ao_unsafe_getable | attached_object_access::user_getable;
+      each,
+      any,
     };
 
     /// \brief Where components are stored
@@ -104,36 +70,37 @@ namespace neam
         using base_t = attached_object::base<DatabaseConf>;
 
         /// \brief A query in the DB
+        template<typename AttachedObject>
         class query_t
         {
           public:
             /// \brief The result of the query
-            std::vector<entity_t *> result;
+            std::vector<AttachedObject *> result;
 
             /// \brief Filter the result of the DB
-            template<typename... AttachedObject>
-            query_t &filter(bool test_is_and = true)
+            template<typename... FilterAttachedObjects>
+            query_t &filter(query_condition condition = query_condition::each)
             {
-              NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, AttachedObject>(attached_object_access::user_getable));
-              return filter({type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id...}, test_is_and);
+              NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, FilterAttachedObjects::ao_class_id, attached_object_access::user_getable>());
+              return filter({type_id<FilterAttachedObjects, typename DatabaseConf::attached_object_type>::id...}, condition);
             }
 
           private:
             /// \brief Filter the result of the DB
-            query_t &filter(const std::vector<type_t> &attached_object_id, bool test_is_and = true)
+            query_t &filter(const std::vector<type_t> &attached_object_id, query_condition condition = query_condition::each)
             {
-              std::vector<entity_t *> next_result;
+              std::vector<AttachedObject *> next_result;
               next_result.reserve(result.size());
 
               for (const auto &entity_it : result)
               {
-                bool ok = test_is_and;
+                bool ok = (condition == query_condition::each);
                 for (const auto &vct_it : attached_object_id)
                 {
-                  const bool res = entity_it->data->attached_objects.count(vct_it) > 0;
-                  ok = test_is_and ? (ok && res) : (ok || res);
+                  const bool res = entity_it->owner->attached_objects.count(vct_it) > 0;
+                  ok = (condition == query_condition::each) ? (ok && res) : (ok || res);
 
-                  if ((test_is_and && !ok) || (!test_is_and && ok))
+                  if (((condition == query_condition::each) && !ok) || (!(condition == query_condition::each) && ok))
                     break;
                 }
 
@@ -147,6 +114,11 @@ namespace neam
         };
 
       public:
+        ~database()
+        {
+          check::on_error::n_assert(entity_data_pool.get_number_of_object() == 0, "There are entities that are still alive AFTER their database has been destructed. This will lead to crashes.");
+        }
+
         /// \brief Create a new entity
         entity_t create_entity(id_t id = ~0u)
         {
@@ -161,46 +133,52 @@ namespace neam
         }
 
         /// \brief Iterate over each attached object of a given type
-        /// \tparam UnaryFunction a function-like object that takes one argument that is the entity
+        /// \tparam UnaryFunction a function-like object that takes one argument that is the attached object (a reference to it)
+        /// \note If your function performs components removal / ... then you may not iterate over each entity and you shoud use a query instead
+        ///       as query perform a copy of the vector
         template<typename AttachedObject, typename UnaryFunction>
         void for_each(const UnaryFunction &func)
         {
-          static_assert_can<DatabaseConf, AttachedObject>(attached_object_access::user_getable);
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
 
-          for_each(type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id, func);
-        }
-
-      private:
-        /// \brief Iterate over each attached object of a given type
-        /// \tparam UnaryFunction a function-like object that takes one argument that is a reference to the entity
-        /// \note If your function performs components removal / ... then you may not iterate over each entity and you shoud use a query instead
-        template<typename UnaryFunction>
-        void for_each(type_t attached_object, const UnaryFunction &func)
-        {
-          if (attached_object > DatabaseConf::max_component_types)
+          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          if (attached_object_id > DatabaseConf::max_component_types)
             return;
 
-          for (uint32_t i = 0; i < attached_object_db[attached_object].size(); ++i)
-            func(attached_object_db[attached_object][i]);
+          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
+            func(*static_cast<AttachedObject *>(attached_object_db[attached_object_id][i]));
+        }
+
+        template<typename AttachedObject, typename UnaryFunction>
+        void for_each(const UnaryFunction &func) const
+        {
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+
+          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          if (attached_object_id > DatabaseConf::max_component_types)
+            return;
+
+          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
+            func(*static_cast<const AttachedObject *>(attached_object_db[attached_object_id][i]));
         }
 
       public:
         /// \brief Perform a query in the DB
         template<typename AttachedObject>
-        query_t query()
+        query_t<AttachedObject> query() const
         {
-          static_assert_can<DatabaseConf, AttachedObject>(attached_object_access::user_getable);
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
 
-          return query(type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id);
-        }
+          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          if (attached_object_id > DatabaseConf::max_component_types)
+            return query_t<AttachedObject>();
 
-      private:
-        /// \brief Perform a query in the DB
-        query_t query(type_t attached_object)
-        {
-          if (attached_object > DatabaseConf::max_component_types)
-            return query_t();
-          return query_t {attached_object_db[attached_object]};
+          std::vector<AttachedObject *> ret;
+          ret.reserve(attached_object_db[attached_object_id].size());
+          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
+            ret.push_back(static_cast<AttachedObject *>(attached_object_db[attached_object_id][i]));
+
+          return query_t<AttachedObject>{ret};
         }
 
       private:
@@ -231,6 +209,10 @@ namespace neam
 
           data->owner = nullptr; // unset the owner
           data->attached_objects.clear(); // just in case
+
+          // free the memory
+          data->~entity_data_t();
+          entity_data_pool.deallocate(data);
         }
 
         template<typename AttachedObject, typename... DataProvider>
@@ -298,6 +280,12 @@ namespace neam
           // undo the segfault thing (the object has been fully constructed)
           data->attached_objects[object_type_id] = ptr;
 
+          // we only insert if the attached object class is user gettable, that way we do not lost time to maintain
+          // something that would trigger a static_assert when used.
+          // The condition is constexpr, so there's not conditional statement in the generated code.
+          if (dbconf_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>())
+            attached_object_db[object_type_id].push_back(ptr);
+
           return *ptr;
         }
 
@@ -347,12 +335,21 @@ namespace neam
           data->component_types[index] &= ~mask;
           data->attached_objects.erase(base->object_type_id);
 
+          // only when supported by the configuration.
+          // no compile-time checks here because that function (and some of its caller)
+          // may does not know the type of the element to remove, so it cannot perform compile-time branching.
+          if (!attached_object_db[base->object_type_id].empty())
+          {
+            attached_object_db[base->object_type_id].erase(std::remove(attached_object_db[base->object_type_id].begin(), attached_object_db[base->object_type_id].end(), base),
+                attached_object_db[base->object_type_id].end());
+          }
+
           // TODO(tim): replace this with a memory pool
           delete base;
         }
 
       private:
-        /// \brief The database of components / views / *, sorted by type_t (attached_object_type)
+        /// \brief The database of components / concepts / *, sorted by type_t (attached_object_type)
         std::vector<base_t *> attached_object_db[DatabaseConf::max_component_types];
 
         neam::cr::memory_pool<entity_data_t> entity_data_pool;

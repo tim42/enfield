@@ -123,13 +123,13 @@ namespace neam
         void for_each_concept_provider(const UnaryFunction &func)
         {
           for (base_concept_logic *it : concept_providers)
-            func(static_cast<typename ConceptType::concept_logic *>(it));
+            func(*static_cast<typename ConceptType::concept_logic *>(it));
         }
         template<typename UnaryFunction>
         void for_each_concept_provider(const UnaryFunction &func) const
         {
           for (const base_concept_logic *it : concept_providers)
-            func(static_cast<const typename ConceptType::concept_logic *>(it));
+            func(*static_cast<const typename ConceptType::concept_logic *>(it));
         }
 
         size_t get_concept_providers_count() const
@@ -137,13 +137,13 @@ namespace neam
           return concept_providers.size();
         }
 
-        auto get_concept_provider(size_t i) -> auto
+        auto get_concept_provider(size_t i) -> auto &
         {
-          return static_cast<typename ConceptType::concept_logic *>(concept_providers[i]);
+          return *static_cast<typename ConceptType::concept_logic *>(concept_providers[i]);
         }
-        auto get_concept_provider(size_t i) const -> auto
+        auto get_concept_provider(size_t i) const -> const auto &
         {
-          return static_cast<const typename ConceptType::concept_logic *>(concept_providers[i]);
+          return *static_cast<const typename ConceptType::concept_logic *>(concept_providers[i]);
         }
 
         auto _get_concept_providers() -> auto

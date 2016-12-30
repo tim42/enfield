@@ -84,32 +84,45 @@ namespace neam
 
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, attached_object_access Operation>
+    constexpr inline bool dbconf_can()
+    {
+      return (DatabaseConf::template class_rights<AttachedObjectClass>::access & Operation) != attached_object_access::none;
+    }
+
+    /// \brief Check that an operation is possible on a given AttachedObject
+    template<typename DatabaseConf, type_t AttachedObjectClass, type_t OtherAttachedObjectClass, attached_object_access Operation>
+    constexpr inline bool dbconf_can()
+    {
+      return (DatabaseConf::template specific_class_rights<AttachedObjectClass, OtherAttachedObjectClass>::access & Operation) != attached_object_access::none;
+    }
+
+    /// \brief Check that an operation is possible on a given AttachedObject
+    template<typename DatabaseConf, type_t AttachedObjectClass, attached_object_access Operation>
     constexpr inline bool static_assert_can()
     {
-      static_assert((DatabaseConf::template class_rights<AttachedObjectClass>::access & Operation) != attached_object_access::none, "Operation on AttachedObject not permitted");
+      static_assert(dbconf_can<DatabaseConf, AttachedObjectClass, Operation>(), "Operation not permitted");
       return true;
     }
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, type_t OtherAttachedObjectClass, attached_object_access Operation>
     constexpr inline bool static_assert_can()
     {
-      static_assert((DatabaseConf::template specific_class_rights<AttachedObjectClass, OtherAttachedObjectClass>::access & Operation) != attached_object_access::none,
-                    "Operation on AttachedObject not permitted for OtherAttachedObject");
+      static_assert(dbconf_can<DatabaseConf, AttachedObjectClass, OtherAttachedObjectClass, Operation>(), "Operation on not permitted in the current context");
       return true;
     }
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, attached_object_access Operation>
     inline void throw_can()
     {
-      if ((DatabaseConf::template class_rights<AttachedObjectClass>::access & Operation) == attached_object_access::none)
-        throw exception_tpl<DatabaseConf>("Operation on AttachedObject not permitted", __FILE__, __LINE__);
+      if (!dbconf_can<DatabaseConf, AttachedObjectClass, Operation>())
+        throw exception_tpl<DatabaseConf>("Operation not permitted", __FILE__, __LINE__);
     }
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, type_t OtherAttachedObjectClass, attached_object_access Operation>
     inline void throw_can()
     {
-      if ((DatabaseConf::template specific_class_rights<AttachedObjectClass, OtherAttachedObjectClass>::access & Operation) == attached_object_access::none)
-        throw exception_tpl<DatabaseConf>("Operation on AttachedObject not permitted for OtherAttachedObject");
+      if (!dbconf_can<DatabaseConf, AttachedObjectClass, OtherAttachedObjectClass, Operation>())
+        throw exception_tpl<DatabaseConf>("Operation not permitted in the current context", __FILE__, __LINE__);
     }
   } // namespace enfield
 } // namespace neam
