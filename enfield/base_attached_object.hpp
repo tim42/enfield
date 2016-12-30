@@ -57,7 +57,13 @@ namespace neam
           base_tpl(entity_t **_owner, type_t _object_type_id) : base<DatabaseConf>(_owner, _object_type_id, AttachedObjectClass::id) {}
           virtual ~base_tpl() = default;
 
-                    /// \brief Require another (requireable) attached object
+          /// \brief Return the entity id
+          id_t get_entity_id() const
+          {
+            return this->owner->entity_id;
+          }
+
+          /// \brief Require another (requireable) attached object
           /// \note circular dependencies will not be tested when calling that function but will trigger an exception when
           ///       trying to destruct the entity. Also, circular dependencies may lead to segfaults/memory corruption
           ///       as the returned object will not be fully constructed (in case of circular dependencies).

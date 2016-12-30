@@ -32,6 +32,7 @@
 
 #include <unordered_set>
 #include <algorithm>
+#include <array>
 
 #include "enfield_types.hpp"
 #include "database_conf.hpp"
@@ -75,41 +76,59 @@ namespace neam
         {
           public:
             /// \brief The result of the query
-            std::vector<AttachedObject *> result;
+            const std::vector<AttachedObject *> result = std::vector<AttachedObject *>();
 
             /// \brief Filter the result of the DB
             template<typename... FilterAttachedObjects>
-            query_t &filter(query_condition condition = query_condition::each)
+            query_t filter(query_condition condition = query_condition::each) const
             {
               NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, FilterAttachedObjects::ao_class_id, attached_object_access::user_getable>());
-              return filter({type_id<FilterAttachedObjects, typename DatabaseConf::attached_object_type>::id...}, condition);
-            }
-
-          private:
-            /// \brief Filter the result of the DB
-            query_t &filter(const std::vector<type_t> &attached_object_id, query_condition condition = query_condition::each)
-            {
               std::vector<AttachedObject *> next_result;
+
               next_result.reserve(result.size());
 
-              for (const auto &entity_it : result)
+              for (const auto &it : result)
               {
                 bool ok = (condition == query_condition::each);
-                for (const auto &vct_it : attached_object_id)
-                {
-                  const bool res = entity_it->owner->attached_objects.count(vct_it) > 0;
-                  ok = (condition == query_condition::each) ? (ok && res) : (ok || res);
-
-                  if (((condition == query_condition::each) && !ok) || (!(condition == query_condition::each) && ok))
-                    break;
-                }
+                if (condition == query_condition::any)
+                  NEAM_EXECUTE_PACK(ok |= it->owner->attached_objects.count(type_id<FilterAttachedObjects, typename DatabaseConf::attached_object_type>::id) > 0);
+                else if (condition == query_condition::each)
+                  NEAM_EXECUTE_PACK(ok &= it->owner->attached_objects.count(type_id<FilterAttachedObjects, typename DatabaseConf::attached_object_type>::id) > 0);
 
                 if (ok)
-                  next_result.push_back(entity_it);
+                  next_result.push_back(it);
               }
 
-              result.swap(next_result);
-              return *this;
+              return query_t {next_result};
+            }
+
+            /// \brief Return both the passing [1] and the failing [0] AttachedObjects
+            template<typename... FilterAttachedObjects>
+            std::array<query_t, 2> filter_both(query_condition condition = query_condition::each) const
+            {
+              NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, FilterAttachedObjects::ao_class_id, attached_object_access::user_getable>());
+
+              std::vector<AttachedObject *> next_result_success;
+              std::vector<AttachedObject *> next_result_fail;
+
+              next_result_success.reserve(result.size());
+              next_result_fail.reserve(result.size());
+
+              for (const auto &it : result)
+              {
+                bool ok = (condition == query_condition::each);
+                if (condition == query_condition::any)
+                  NEAM_EXECUTE_PACK(ok |= it->owner->attached_objects.count(type_id<FilterAttachedObjects, typename DatabaseConf::attached_object_type>::id) > 0);
+                else if (condition == query_condition::each)
+                  NEAM_EXECUTE_PACK(ok &= it->owner->attached_objects.count(type_id<FilterAttachedObjects, typename DatabaseConf::attached_object_type>::id) > 0);
+
+                if (ok)
+                  next_result_success.push_back(it);
+                else
+                  next_result_fail.push_back(it);
+              }
+
+              return {query_t{next_result_fail}, query_t{next_result_success}};
             }
         };
 
