@@ -30,10 +30,13 @@
 #ifndef __N_66023502427817558_330010620_ENFIELD_HPP__
 #define __N_66023502427817558_330010620_ENFIELD_HPP__
 
+#include "database_conf.hpp"
+
 #include "entity.hpp"
 #include "database.hpp"
 
 #include "component/component.hpp"
+#include "concept/concept.hpp"
 
 namespace neam
 {

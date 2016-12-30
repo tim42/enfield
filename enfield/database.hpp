@@ -74,7 +74,7 @@ namespace neam
 
       /// \brief Specify the rights of OtherClassId over ClassId.
       /// In this mode, only attached_object_access::ao_* are accounted
-      /// he default is to use the class_rights.
+      /// the default is to use the class_rights.
       template<type_t ClassId, type_t OtherClassId>
       struct specific_class_rights : public class_rights<ClassId> {};
 
@@ -216,7 +216,7 @@ namespace neam
           std::vector<base_t *> to_remove;
           for (auto &it : data->attached_objects)
           {
-            if (it.second->required_by.empty())
+            if (it.second->user_added)
               to_remove.push_back(it.second);
           }
           for (auto &it : to_remove)

@@ -42,18 +42,13 @@ namespace neam
       /// \brief Create an automanaged attached object (not creatable, except by itself, not removable, except by itself)
       none = 0,
 
-      /// \brief Can another attached object via a require operation create an attached object of that class ?
-      /// \note without ao_requireable it does not have any effect.
-      /// \note specifying ao_requireable but not ao_creatable won't generate compilation errors but will trigger exceptions.
-      ao_creatable =        1 << 1,
-      /// \brief Can another attached object require that an attached object of that class ?
-      /// \note if ao_creatable isn't specified, the attached object class can only be retrieved, not created.
-      ///       This won't add compile-time checks as this operation can only be performed at runtime.
+      /// \brief Can another attached object require that an attached object of that class ? (this allows implicit creation via a require call)
       ao_requireable =      1 << 2,
       /// \brief Can another attached object destruct an attached object of that class ?
       /// \note If not in the rights, the only way to destroy an attached object of that class is either:
       ///         - by an entity destruction
       ///         - when the attached object calls commit_suicide() on itself
+      /// \todo [tim] implementation of that right
       ao_removable =        1 << 3,
 
       /// \brief Allow that attached object to be retrieved via get_unsafe
@@ -63,9 +58,9 @@ namespace neam
       automanaged =         1 << 5,
 
       /// \brief grant all rights to other attached objects
-      ao_all = ao_creatable | ao_requireable | ao_removable | ao_unsafe_getable,
+      ao_all = ao_requireable | ao_removable | ao_unsafe_getable,
       /// \brief grant all "safe" rights to other attached objects
-      ao_all_safe = ao_creatable | ao_requireable | ao_removable,
+      ao_all_safe = ao_requireable | ao_removable,
 
       /// \brief Can the user (user = public API of the entity) create an attached object of that class ?
       user_creatable =      1 << 8,
