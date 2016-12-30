@@ -59,6 +59,9 @@ namespace neam
       /// \brief Allow that attached object to be retrieved via get_unsafe
       ao_unsafe_getable =   1 << 4,
 
+      /// \brief Allow automanagement of the attached object class (self creation / self destruction)
+      automanaged =         1 << 5,
+
       /// \brief grant all rights to other attached objects
       ao_all = ao_creatable | ao_requireable | ao_removable | ao_unsafe_getable,
       /// \brief grant all "safe" rights to other attached objects

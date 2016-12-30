@@ -43,7 +43,7 @@ namespace neam
   {
     namespace attached_object
     {
-      template<typename DBC, typename AttachedObjectClass> class base_tpl;
+      template<typename DBC, typename AttachedObjectClass, typename FinalClass> class base_tpl;
     } // namespace attached_object
 
     static constexpr long poisoned_pointer = (~static_cast<long>(0xDEADBEEF));
@@ -87,7 +87,7 @@ namespace neam
       // specific configuration: (must be static constexpr)
 
       /// \brief Define general access rights
-      static constexpr attached_object_access access = attached_object_access::ao_requireable | attached_object_access::ao_unsafe_getable | attached_object_access::user_getable;
+      static constexpr attached_object_access access = attached_object_access::automanaged | attached_object_access::ao_unsafe_getable | attached_object_access::user_getable;
     };
 
     /// \brief Where components are stored
@@ -238,7 +238,7 @@ namespace neam
         {
           AttachedObject &ret = _create_ao<AttachedObject>(data, provider...);
           base_t *bptr = &ret;
-          check::on_error::n_assert(bptr != (AttachedObject *)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
+          check::on_error::n_assert(bptr != (base_t *)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
           bptr->user_added = true;
           return ret;
         }
@@ -283,9 +283,6 @@ namespace neam
         template<typename AttachedObject, typename... DataProvider>
         AttachedObject &_create_ao(entity_data_t *data, DataProvider *...provider)
         {
-#ifdef ENFIELD_ENABLE_DEBUG_CHECKS
-          data->throw_validate();
-#endif
           const type_t object_type_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
           const uint32_t index = object_type_id / (sizeof(uint64_t) * 8);
           const uint64_t mask = 1ul << (object_type_id % (sizeof(uint64_t) * 8));
@@ -300,9 +297,7 @@ namespace neam
 
           // undo the segfault thing (the object has been fully constructed)
           data->attached_objects[object_type_id] = ptr;
-#ifdef ENFIELD_ENABLE_DEBUG_CHECKS
-          data->throw_validate();
-#endif
+
           return *ptr;
         }
 
@@ -364,7 +359,7 @@ namespace neam
 
         friend class entity<DatabaseConf>;
         friend class attached_object::base<DatabaseConf>;
-        template<typename DBC, typename AttachedObjectClass>
+        template<typename DBC, typename AttachedObjectClass, typename FC>
         friend class attached_object::base_tpl;
     };
   } // namespace enfield

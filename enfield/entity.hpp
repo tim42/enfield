@@ -208,7 +208,7 @@ namespace neam
 
           if (!has<AttachedObject>())
             return;
-          db->template remove_ao_user<AttachedObject>(data);
+          db->template remove_ao_user(data, data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
         }
 
         /// \brief Return an attached object.

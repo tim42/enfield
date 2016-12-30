@@ -52,30 +52,28 @@ namespace neam
       template<typename DatabaseConf>
       class base
       {
-        public:
+        private:
           using entity_t = entity<DatabaseConf>;
           using entity_data_t = typename entity<DatabaseConf>::data_t;
           using database_t = database<DatabaseConf>;
 
+        public:
+          using param_t = entity_t **;
+
         private:
           base(entity_t **_owner, type_t _object_type_id, type_t _class_id)
-            : object_type_id(_object_type_id), class_id(_class_id), owner((*_owner)->data) {};
+            : object_type_id(_object_type_id), class_id(_class_id), owner((*_owner)->data)
+          {
+            check::on_error::n_assert(object_type_id < DatabaseConf::max_component_types, "Too many attached object types for the current configuration");
+          };
 
-        protected:
           virtual ~base()
           {
             check::on_error::n_assert(authorized_destruction, "Trying to destroy an attached object in an unauthorized fashion");
             check::on_error::n_assert(required_by.empty(), "Trying to destroy an attached object when other attached objects require it");
             check::on_error::n_assert(requires.empty(), "Trying to destroy an attached object that hasn't been properly cleaned-up (still some dependency)");
             check::on_error::n_assert(!user_added, "Trying to destroy an attached object when only the user may remove it (it has been flagged as user-added)");
-          }
-
-          /// \brief Self destruct the attached object.
-          /// This may not directly calls the destructor but instead flag the attached object to be destructed
-          /// when there is no other object requiring it. This effectively bypass the user_added flag.
-          void commit_suicide()
-          {
-            owner->db->remove_ao_user(owner, this);
+            check::on_error::n_assert(!automanaged, "Trying to destroy an attached object when only itself may remove it (via commit_suicide())");
           }
 
         public:
@@ -97,6 +95,7 @@ namespace neam
           entity_data_t *owner;
 
           bool user_added = false;
+          bool automanaged = false;
           std::set<base *> required_by;
           std::set<base *> requires;
 
@@ -105,7 +104,7 @@ namespace neam
           friend class neam::enfield::database<DatabaseConf>;
           friend class neam::enfield::entity<DatabaseConf>;
 
-          template<typename DBC, typename AttachedObjectClass>
+          template<typename DBC, typename AttachedObjectClass, typename FC>
           friend class base_tpl;
       };
     } // namespace attached_object

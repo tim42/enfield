@@ -30,8 +30,6 @@
 #ifndef __N_19625634529221301_2572711997_COMPONENT_HPP__
 #define __N_19625634529221301_2572711997_COMPONENT_HPP__
 
-#include <cstdint>
-
 #include "../base_attached_object.hpp"
 #include "../type_id.hpp"
 #include "../enfield_exception.hpp"
@@ -40,31 +38,26 @@ namespace neam
 {
   namespace enfield
   {
-    /// \brief This is a base component, and should not be used directly
+    /// \brief This is a base component, and should be inherited by components
     /// \tparam DatabaseConf is the configuration object for the database
     /// \tparam ComponentType is the final component type
     template<typename DatabaseConf, typename ComponentType>
-    class base_component : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class>
+    class base_component : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class, ComponentType>
     {
       public:
-        using entity_t = typename attached_object::base<DatabaseConf>::entity_t;
-        using database_t = typename attached_object::base<DatabaseConf>::database_t;
+        using param_t = typename attached_object::base<DatabaseConf>::param_t;
 
         virtual ~base_component() = default;
 
       protected:
-        base_component(entity_t **_owner)
-          : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class>
+        base_component(param_t _param)
+          : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class, ComponentType>
           (
-            _owner,
+            _param,
             type_id<ComponentType, typename DatabaseConf::attached_object_type>::id
           )
         {
-           check::on_error::n_assert(attached_object::base<DatabaseConf>::object_type_id < DatabaseConf::max_component_types, "Too many component types for the current configuration");
         }
-
-      protected:
-      private:
     };
   } // namespace enfield
 } // namespace neam
