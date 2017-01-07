@@ -54,7 +54,12 @@ namespace neam
           using param_t = entity_t **;
 
         protected:
-          base_tpl(entity_t **_owner, type_t _object_type_id) : base<DatabaseConf>(_owner, _object_type_id, AttachedObjectClass::id) {}
+          base_tpl(entity_t **_owner, type_t _object_type_id) : base<DatabaseConf>(_owner, _object_type_id, AttachedObjectClass::id)
+          {
+            // Here, as when triggered the whole class has been generated
+            static_assert_check_attached_object<DatabaseConf, FinalClass>();
+          }
+
           virtual ~base_tpl() = default;
 
           /// \brief Return the entity id

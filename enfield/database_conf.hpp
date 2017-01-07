@@ -33,10 +33,18 @@
 #include "enfield_exception.hpp"
 #include "enfield_types.hpp"
 
+#include "tools/ct_list.hpp"
+
 namespace neam
 {
   namespace enfield
   {
+    namespace attached_object
+    {
+      template<typename DatabaseConf, typename AttachedObjectClass, typename FinalClass> class base_tpl;
+      template<typename DatabaseConf> class base;
+    } // namespace attached_object
+
     enum class attached_object_access : int
     {
       /// \brief Create an automanaged attached object (not creatable, except by itself, not removable, except by itself)
@@ -82,11 +90,48 @@ namespace neam
     inline /*constexpr*/ attached_object_access &operator |= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a | (int)b); return a; }
     inline /*constexpr*/ attached_object_access &operator &= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a & (int)b); return a; }
 
+    namespace internal
+    {
+      template<typename List, type_t ClassId>
+      struct class_id
+      {
+        template<typename X>
+        struct _find
+        {
+          static constexpr bool value = (X::id == ClassId);
+        };
+
+        using type = typename List::template find_if<_find>::type;
+      };
+    }
+
+    /// \brief Check that the corresponding type satisfy the database requirements
+    template<typename DatabaseConf, typename AttachedObject>
+    constexpr inline bool static_assert_check_attached_object()
+    {
+      // Enfield default checks
+      static_assert(std::is_base_of<neam::enfield::attached_object::base<DatabaseConf>, AttachedObject>::value, "invalid type: is not an attached object");
+
+      using class_t = typename internal::class_id<typename DatabaseConf::classes, AttachedObject::ao_class_id>::type;
+      static_assert(!std::is_same<ct::type_not_found, class_t>::value, "invalid attached object Class ID");
+      static_assert(std::is_same<class_t, typename AttachedObject::class_t>::value, "invalid attached object class");
+      static_assert(std::is_base_of<neam::enfield::attached_object::base_tpl<DatabaseConf, class_t, AttachedObject>, AttachedObject>::value, "invalid attached object: does not inherit from the correct class");
+
+      // Type specific checks (note: you should static_assert in that class)
+      static_assert(DatabaseConf::template check_attached_object<AttachedObject::ao_class_id, AttachedObject>::value, "invalid attached object: database conf checks have failed");
+      return true;
+    }
+
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, attached_object_access Operation>
     constexpr inline bool dbconf_can()
     {
       return (DatabaseConf::template class_rights<AttachedObjectClass>::access & Operation) != attached_object_access::none;
+    }
+    template<typename DatabaseConf, typename AttachedObjectClass, attached_object_access Operation>
+    constexpr inline bool dbconf_can()
+    {
+      return dbconf_can<DatabaseConf, AttachedObjectClass::ao_class_id, Operation>();
     }
 
     /// \brief Check that an operation is possible on a given AttachedObject
@@ -94,6 +139,11 @@ namespace neam
     constexpr inline bool dbconf_can()
     {
       return (DatabaseConf::template specific_class_rights<AttachedObjectClass, OtherAttachedObjectClass>::access & Operation) != attached_object_access::none;
+    }
+    template<typename DatabaseConf, typename AttachedObjectClass, typename OtherAttachedObjectClass, attached_object_access Operation>
+    constexpr inline bool dbconf_can()
+    {
+      return dbconf_can<DatabaseConf, AttachedObjectClass::ao_class_id, OtherAttachedObjectClass::ao_class_id, Operation>();
     }
 
     /// \brief Check that an operation is possible on a given AttachedObject
@@ -103,6 +153,13 @@ namespace neam
       static_assert(dbconf_can<DatabaseConf, AttachedObjectClass, Operation>(), "Operation not permitted");
       return true;
     }
+    template<typename DatabaseConf, typename AttachedObjectClass, attached_object_access Operation>
+    constexpr inline bool static_assert_can()
+    {
+      static_assert(dbconf_can<DatabaseConf, AttachedObjectClass, Operation>(), "Operation not permitted");
+      return true;
+    }
+
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, type_t OtherAttachedObjectClass, attached_object_access Operation>
     constexpr inline bool static_assert_can()
@@ -110,6 +167,13 @@ namespace neam
       static_assert(dbconf_can<DatabaseConf, AttachedObjectClass, OtherAttachedObjectClass, Operation>(), "Operation on not permitted in the current context");
       return true;
     }
+    template<typename DatabaseConf, typename AttachedObjectClass, typename OtherAttachedObjectClass, attached_object_access Operation>
+    constexpr inline bool static_assert_can()
+    {
+      static_assert(dbconf_can<DatabaseConf, AttachedObjectClass, OtherAttachedObjectClass, Operation>(), "Operation on not permitted in the current context");
+      return true;
+    }
+
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, attached_object_access Operation>
     inline void throw_can()
@@ -117,8 +181,21 @@ namespace neam
       if (!dbconf_can<DatabaseConf, AttachedObjectClass, Operation>())
         throw exception_tpl<DatabaseConf>("Operation not permitted", __FILE__, __LINE__);
     }
+    template<typename DatabaseConf, typename AttachedObjectClass, attached_object_access Operation>
+    inline void throw_can()
+    {
+      if (!dbconf_can<DatabaseConf, AttachedObjectClass, Operation>())
+        throw exception_tpl<DatabaseConf>("Operation not permitted", __FILE__, __LINE__);
+    }
+
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, type_t OtherAttachedObjectClass, attached_object_access Operation>
+    inline void throw_can()
+    {
+      if (!dbconf_can<DatabaseConf, AttachedObjectClass, OtherAttachedObjectClass, Operation>())
+        throw exception_tpl<DatabaseConf>("Operation not permitted in the current context", __FILE__, __LINE__);
+    }
+    template<typename DatabaseConf, typename AttachedObjectClass, typename OtherAttachedObjectClass, attached_object_access Operation>
     inline void throw_can()
     {
       if (!dbconf_can<DatabaseConf, AttachedObjectClass, OtherAttachedObjectClass, Operation>())

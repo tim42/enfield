@@ -181,11 +181,24 @@ int main(int, char **)
   entity.add<truc2>();
   entity.remove<truc>();
 
-  // iterate over every printable of the DB. This operation is O(1)
-  db.for_each<printable>([](printable &t)
+  // Iterate over every printable of the DB.
+  // There are no additional cost than running the function the exact number of printable there is in the DB.
+  //
+  // Notice how the type is deduced from the function parameter.
+  db.for_each([](printable &t)
   {
     t.print_all();
   });
+
+  // You can even query multiple attached objects. Only entities with every of those attached objects will be iterated over,
+  // so be certain to put the "limiting" attached object first (the rarest attached object)
+  db.for_each([](printable &t, truc &tt)
+  {
+    tt.print();
+    t.print_all();
+    tt.print();
+  });
+
 
   // perform a query on the db: it will return every printable whose entity has either a truc or a truc2 component
   const auto query = db.query<printable>().filter<truc2, truc>(enfield::query_condition::any);

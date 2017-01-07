@@ -33,6 +33,8 @@
 #include "database_conf.hpp"
 #include "enfield_types.hpp"
 
+#include "tools/ct_list.hpp"
+
 namespace neam
 {
   namespace enfield
@@ -42,6 +44,17 @@ namespace neam
     ///   - what are the specifc access rights of a given attached object class
     namespace db_conf
     {
+      // HELPERS //
+
+      /// \brief Does not perform any checks
+      template<bool Value>
+      struct no_check
+      {
+        static constexpr bool value = Value;
+      };
+
+      // CONFS //
+
       /// \brief ECCS (entity component concept system) configuration
       /// This is the default DB configuration.
       struct eccs
@@ -53,6 +66,9 @@ namespace neam
         // allowed attached object classes (the constexpr type_t id is mandatory):
         struct component_class { static constexpr type_t id = 0; };
         struct concept_class { static constexpr type_t id = 1; };
+
+        // the list of classes
+        using classes = ct::type_list<component_class, concept_class>;
 
         // "rights" configuration:
         template<type_t ClassId>
@@ -69,6 +85,10 @@ namespace neam
         /// the default is to use the class_rights.
         template<type_t ClassId, type_t OtherClassId>
         struct specific_class_rights : public class_rights<ClassId> {};
+
+        /// \brief In that mode, the default enfield checks are OK
+        template<type_t ClassId, typename AttachedObject>
+        struct check_attached_object : no_check<true> {};
 
         /// \brief The maximum number of components
         static constexpr uint64_t max_component_types = 2 * 64;
@@ -96,6 +116,9 @@ namespace neam
         struct component_class { static constexpr type_t id = 0; };
         struct concept_class { static constexpr type_t id = 1; };
 
+        // the list of classes
+        using classes = ct::type_list<component_class, concept_class>;
+
         // "rights" configuration:
         template<type_t ClassId>
         struct class_rights
@@ -111,6 +134,10 @@ namespace neam
         /// the default is to use the class_rights.
         template<type_t ClassId, type_t OtherClassId>
         struct specific_class_rights : public class_rights<ClassId> {};
+
+        /// \brief In that mode, the default enfield checks are OK
+        template<type_t ClassId, typename AttachedObject>
+        struct check_attached_object : no_check<true> {};
 
         /// \brief The maximum number of components
         static constexpr uint64_t max_component_types = 2 * 64;
@@ -140,6 +167,9 @@ namespace neam
         // allowed attached object classes (the constexpr type_t id is mandatory):
         struct component_class { static constexpr type_t id = 0; };
 
+        // the list of classes
+        using classes = ct::type_list<component_class>;
+
         // "rights" configuration:
         template<type_t ClassId>
         struct class_rights
@@ -155,6 +185,10 @@ namespace neam
         /// the default is to use the class_rights.
         template<type_t ClassId, type_t OtherClassId>
         struct specific_class_rights : public class_rights<ClassId> {};
+
+        /// \brief In that mode, the default enfield checks are OK
+        template<type_t ClassId, typename AttachedObject>
+        struct check_attached_object : no_check<true> {};
 
         /// \brief The maximum number of components
         static constexpr uint64_t max_component_types = 2 * 64;

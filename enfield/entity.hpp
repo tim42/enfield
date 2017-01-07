@@ -35,10 +35,10 @@
 
 #include "enfield_types.hpp"
 #include "enfield_exception.hpp"
-#include "database_conf.hpp"
 
 #include "type_id.hpp"
 #include "internal_base_attached_object.hpp"
+#include "database_conf.hpp"
 
 namespace neam
 {
@@ -183,7 +183,8 @@ namespace neam
         template<typename AttachedObject, typename... DataProvider>
         AttachedObject &add(DataProvider *...provider)
         {
-          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_creatable>();
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_creatable>();
 
           if (has<AttachedObject>())
           {
@@ -204,7 +205,8 @@ namespace neam
         template<typename AttachedObject>
         void remove()
         {
-          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_removable>();
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_removable>();
 
           if (!has<AttachedObject>())
             return;
@@ -217,7 +219,8 @@ namespace neam
         template<typename AttachedObject>
         AttachedObject *get()
         {
-          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
 
           if (!has<AttachedObject>())
             return nullptr;
@@ -230,7 +233,8 @@ namespace neam
         template<typename AttachedObject>
         const AttachedObject *get() const
         {
-          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
 
           if (!has<AttachedObject>())
             return nullptr;
@@ -242,7 +246,8 @@ namespace neam
         template<typename AttachedObject>
         bool has() const
         {
-          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
 
           const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
           const uint32_t index = id / (sizeof(uint64_t) * 8);

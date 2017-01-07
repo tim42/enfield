@@ -38,6 +38,7 @@
 #include "database_conf.hpp"
 #include "tools/memory_pool.hpp"
 #include "tools/execute_pack.hpp"
+#include "tools/function.hpp"
 
 namespace neam
 {
@@ -64,12 +65,18 @@ namespace neam
     {
       private: // check the validity of the compile-time conf
         static_assert(DatabaseConf::max_component_types % (sizeof(uint64_t) * 8) == 0, "database's Conf::max_component_types property must be a multiple of uint64_t");
+        template<typename Type>
+        using rm_rcv = typename std::remove_reference<typename std::remove_cv<Type>::type>::type;
 
       public:
         using conf_t = DatabaseConf;
         using entity_t = entity<DatabaseConf>;
         using base_t = attached_object::base<DatabaseConf>;
 
+      private:
+        using entity_data_t = typename entity_t::data_t;
+
+      public:
         /// \brief A query in the DB
         template<typename AttachedObject>
         class query_t
@@ -82,7 +89,8 @@ namespace neam
             template<typename... FilterAttachedObjects>
             query_t filter(query_condition condition = query_condition::each) const
             {
-              NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, FilterAttachedObjects::ao_class_id, attached_object_access::user_getable>());
+              NEAM_EXECUTE_PACK(static_assert_check_attached_object<DatabaseConf, FilterAttachedObjects>());
+              NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::user_getable>());
               std::vector<AttachedObject *> next_result;
 
               next_result.reserve(result.size());
@@ -106,7 +114,8 @@ namespace neam
             template<typename... FilterAttachedObjects>
             std::array<query_t, 2> filter_both(query_condition condition = query_condition::each) const
             {
-              NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, FilterAttachedObjects::ao_class_id, attached_object_access::user_getable>());
+              NEAM_EXECUTE_PACK(static_assert_check_attached_object<DatabaseConf, FilterAttachedObjects>());
+              NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::user_getable>());
 
               std::vector<AttachedObject *> next_result_success;
               std::vector<AttachedObject *> next_result_fail;
@@ -155,30 +164,20 @@ namespace neam
         /// \tparam UnaryFunction a function-like object that takes one argument that is the attached object (a reference to it)
         /// \note If your function performs components removal / ... then you may not iterate over each entity and you shoud use a query instead
         ///       as query perform a copy of the vector
-        template<typename AttachedObject, typename UnaryFunction>
-        void for_each(const UnaryFunction &func)
+        template<typename UnaryFunction>
+        void for_each(const UnaryFunction& func)
         {
-          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+          using list = typename ct::function_traits<UnaryFunction>::arg_list::template direct_for_each<rm_rcv>;
 
-          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-          if (attached_object_id > DatabaseConf::max_component_types)
-            return;
-
-          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
-            func(*static_cast<AttachedObject *>(attached_object_db[attached_object_id][i]));
+          for_each_list<typename list::template get_type<0>>(func, typename list::pop_front());
         }
 
-        template<typename AttachedObject, typename UnaryFunction>
-        void for_each(const UnaryFunction &func) const
+        template<typename UnaryFunction>
+        void for_each(const UnaryFunction& func) const
         {
-          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+          using list = typename ct::function_traits<UnaryFunction>::arg_list::template direct_for_each<rm_rcv>;
 
-          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-          if (attached_object_id > DatabaseConf::max_component_types)
-            return;
-
-          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
-            func(*static_cast<const AttachedObject *>(attached_object_db[attached_object_id][i]));
+          for_each_list<typename list::template get_type<0>>(func, typename list::pop_front());
         }
 
       public:
@@ -186,6 +185,7 @@ namespace neam
         template<typename AttachedObject>
         query_t<AttachedObject> query() const
         {
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
           static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
 
           const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
@@ -200,8 +200,118 @@ namespace neam
           return query_t<AttachedObject>{ret};
         }
 
+      private: // for each impl
+        template<typename AttachedObject, typename UnaryFunction, typename... AdditionalAttachedObjects>
+        void for_each_list(const UnaryFunction &func, ct::type_list<AdditionalAttachedObjects...>)
+        {
+          // CT checks
+          static_assert(ct::function_traits<UnaryFunction>::arg_list::size >= 1, "for_each only takes functions with parameters");
+
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
+          NEAM_EXECUTE_PACK(static_assert_check_attached_object<DatabaseConf, AdditionalAttachedObjects>());
+          NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, AdditionalAttachedObjects, attached_object_access::user_getable>());
+
+
+          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          if (attached_object_id > DatabaseConf::max_component_types)
+            return;
+
+
+          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
+          {
+            bool ok = true;
+            NEAM_EXECUTE_PACK(ok &= entity_has<AdditionalAttachedObjects>(attached_object_db[attached_object_id][i]->owner));
+            if (ok)
+            {
+              func(*static_cast<AttachedObject *>(attached_object_db[attached_object_id][i]), *entity_get<AdditionalAttachedObjects>(attached_object_db[attached_object_id][i]->owner)...);
+            }
+          }
+        }
+
+        template<typename AttachedObject, typename UnaryFunction, typename... AdditionalAttachedObjects>
+        void for_each_list(const UnaryFunction &func, ct::type_list<AdditionalAttachedObjects...>) const
+        {
+          // CT checks
+          static_assert(ct::function_traits<UnaryFunction>::arg_list::size >= 1, "for_each only takes functions with parameters");
+
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
+          NEAM_EXECUTE_PACK(static_assert_check_attached_object<DatabaseConf, AdditionalAttachedObjects>());
+          NEAM_EXECUTE_PACK(static_assert_can<DatabaseConf, AdditionalAttachedObjects, attached_object_access::user_getable>());
+
+
+          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          if (attached_object_id > DatabaseConf::max_component_types)
+            return;
+
+
+          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
+          {
+            bool ok = true;
+            NEAM_EXECUTE_PACK(ok &= entity_has<AdditionalAttachedObjects>(attached_object_db[attached_object_id][i]->owner));
+            if (ok)
+            {
+              func(*static_cast<const AttachedObject *>(attached_object_db[attached_object_id][i]), *entity_get<AdditionalAttachedObjects>(attached_object_db[attached_object_id][i]->owner)...);
+            }
+          }
+        }
+
+        // faster overload for only one attached object
+        template<typename AttachedObject, typename UnaryFunction>
+        void for_each_list(const UnaryFunction &func, ct::type_list<>)
+        {
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
+
+          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          if (attached_object_id > DatabaseConf::max_component_types)
+            return;
+
+          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
+            func(*static_cast<AttachedObject *>(attached_object_db[attached_object_id][i]));
+        }
+
+        // faster overload for only one attached object
+        template<typename AttachedObject, typename UnaryFunction>
+        void for_each_list(const UnaryFunction &func, ct::type_list<>) const
+        {
+          static_assert_check_attached_object<DatabaseConf, AttachedObject>();
+          static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
+
+          const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          if (attached_object_id > DatabaseConf::max_component_types)
+            return;
+
+          for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
+            func(*static_cast<const AttachedObject *>(attached_object_db[attached_object_id][i]));
+        }
+
       private:
-        using entity_data_t = typename entity_t::data_t;
+        template<typename AttachedObject>
+        bool entity_has(const entity_data_t *data) const
+        {
+          const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          const uint32_t index = id / (sizeof(uint64_t) * 8);
+          const uint64_t mask = 1ul << (id % (sizeof(uint64_t) * 8));
+          return (data->component_types[index] & mask) != 0;
+        }
+
+        template<typename AttachedObject>
+        AttachedObject *entity_get(entity_data_t *data)
+        {
+          if (!entity_has<AttachedObject>(data))
+            return nullptr;
+          return static_cast<AttachedObject*>(data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+        }
+
+        template<typename AttachedObject>
+        const AttachedObject *entity_get(const entity_data_t *data) const
+        {
+          if (!entity_has<AttachedObject>())
+            return nullptr;
+          return static_cast<const AttachedObject*>(data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+        }
 
         void remove_entity(entity_data_t *data)
         {

@@ -30,11 +30,9 @@
 #ifndef __N_66023502427817558_330010620_ENFIELD_HPP__
 #define __N_66023502427817558_330010620_ENFIELD_HPP__
 
-#include "database_conf.hpp"
-#include "database_conf_impl.hpp"
-
 #include "entity.hpp"
 #include "database.hpp"
+#include "database_conf_impl.hpp"
 
 #include "component/component.hpp"
 #include "concept/concept.hpp"
