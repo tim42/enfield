@@ -36,6 +36,7 @@
 
 #include "component/component.hpp"
 #include "concept/concept.hpp"
+#include "system/system.hpp"
 
 namespace neam
 {

@@ -33,6 +33,9 @@
 #include <unordered_set>
 #include <algorithm>
 #include <array>
+#include <deque>
+#include <vector>
+#include <atomic>
 
 #include "enfield_types.hpp"
 #include "database_conf.hpp"
@@ -145,19 +148,164 @@ namespace neam
         ~database()
         {
           check::on_error::n_assert(entity_data_pool.get_number_of_object() == 0, "There are entities that are still alive AFTER their database has been destructed. This will lead to crashes.");
+          clear_systems();
         }
 
         /// \brief Create a new entity
         entity_t create_entity(id_t id = ~0u)
         {
           entity_data_t *data = entity_data_pool.allocate();
-          new (data) entity_data_t(id, this); // call the constructor
+          try
+          {
+            new(data) entity_data_t(id, this);  // call the constructor
+          }
+          catch (...)
+          {
+            entity_data_pool.deallocate(data);
+            throw;
+          }
 
           entity_t ret(*this, *data);
 #ifdef ENFIELD_ENABLE_DEBUG_CHECKS
           data->throw_validate();
 #endif
+
+          // for systems
+          entity_list.push_back(data);
+
           return ret;
+        }
+
+        /// \brief Add a new system to the system list
+        template<typename System, typename... Args>
+        System &add_system(Args &&... args)
+        {
+          System *sys = new System(*this, args...);
+          systems.push_back(sys);
+          return *sys;
+        }
+
+        /// \brief Remove a system from the list
+        /// \warning This operation is quite slow
+        template<typename System>
+        void remove_system()
+        {
+          const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
+          systems.erase(std::remove_if(systems.begin(), systems.end(), [id](base_system<DatabaseConf> *sys)
+          {
+            if (sys->system_id == id)
+            {
+              delete sys;
+              return true;
+            }
+            return false;
+          }), systems.end());
+        }
+
+        /// \brief Retrieve a system from the list
+        /// \warning This operation is slow
+        template<typename System>
+        System &get_system()
+        {
+          const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
+          for (base_system<DatabaseConf> *sys : systems)
+          {
+            if (sys->system_id == id)
+              return *static_cast<System *>(sys);
+          }
+          throw exception_tpl<database>("Could not find the corresponding system", __FILE__, __LINE__);
+        }
+
+        /// \brief Retrieve a system from the list
+        /// \warning This operation is slow
+        template<typename System>
+        System &get_system() const
+        {
+          const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
+          for (const base_system<DatabaseConf> *sys : systems)
+          {
+            if (sys->system_id == id)
+              return *static_cast<const System *>(sys);
+          }
+          throw exception_tpl<database>("Could not find the corresponding system", __FILE__, __LINE__);
+        }
+
+        /// \brief Retrieve a system from the list
+        /// \warning This operation is slow
+        template<typename System>
+        bool has_system() const
+        {
+          const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
+          for (base_system<DatabaseConf> *sys : systems)
+          {
+            if (sys->system_id == id)
+              return true;
+          }
+          throw false;
+        }
+
+        /// \brief Run the systems
+        /// \note You can call this function on multiple threads at the same time
+        void run_systems()
+        {
+          enum state : int {ended = -2, init = -1};
+
+          static std::atomic<int> index = ATOMIC_VAR_INIT(ended);
+          static std::atomic<bool> is_terminating = ATOMIC_VAR_INIT(false);
+
+          // wait for the last run to finish
+          while (is_terminating.load(std::memory_order_acquire) != false);
+
+          // Init the systems for this run
+          if (index++ == ended)
+          {
+            // init the systems
+            for (base_system<DatabaseConf> *sys : systems)
+              sys->begin();
+
+            ++index; // index = 0
+          }
+          else while (index.load(std::memory_order_acquire) == init);
+
+          // Run
+          do
+          {
+            const int i = index++;
+
+            if (size_t(i) >= entity_list.size())
+            {
+              index = ended;
+              break;
+            }
+
+            entity_data_t *data = entity_list[i];
+
+            // run the entity on every system
+            for (base_system<DatabaseConf> *sys : systems)
+            {
+              if (!sys->try_run(data))
+                break;
+            }
+          } while (true);
+
+          bool res = false;
+          if (is_terminating.compare_exchange_strong(res, true))
+          {
+            // de-init the systems
+            for (base_system<DatabaseConf> *sys : systems)
+              sys->end();
+
+            index = ended;
+            is_terminating = false;
+          }
+        }
+
+        /// \brief Remove every system
+        void clear_systems()
+        {
+          for (base_system<DatabaseConf> *sys : systems)
+            delete sys;
+          systems.clear();
         }
 
         /// \brief Iterate over each attached object of a given type
@@ -329,6 +477,10 @@ namespace neam
           for (auto &it : to_remove)
             remove_ao_user(data, it);
 
+          // remove the entity from the list
+          // TODO(tim): use a smart cache and avoid that costly removal
+          entity_list.erase(std::remove(entity_list.begin(), entity_list.end(), data), entity_list.end());
+
           // This error mostly tells you that you have dependency cycles in your attached objects.
           // You can put a breakpoint here and look at what is inside the attached_objects vector.
           //
@@ -403,8 +555,20 @@ namespace neam
           // (this helps avoiding incorrect usage of partially constructed attached objects)
           data->attached_objects[object_type_id] = (base_t *)(poisoned_pointer);
 
-          // TODO(tim): replace this with a memory pool
-          AttachedObject *ptr = new AttachedObject(&data->owner, provider...);
+          AttachedObject *ptr = nullptr;
+          try
+          {
+            // TODO(tim): replace this with a memory pool
+            ptr = new AttachedObject(&data->owner, provider...);
+          }
+          catch (...)
+          {
+            // cleanup
+            data->component_types[index] &= ~mask;
+            data->attached_objects.erase(object_type_id);
+
+            throw;
+          }
 
           // undo the segfault thing (the object has been fully constructed)
           data->attached_objects[object_type_id] = ptr;
@@ -481,12 +645,18 @@ namespace neam
         /// \brief The database of components / concepts / *, sorted by type_t (attached_object_type)
         std::vector<base_t *> attached_object_db[DatabaseConf::max_component_types];
 
+        std::vector<base_system<DatabaseConf> *> systems;
+
         neam::cr::memory_pool<entity_data_t> entity_data_pool;
+
+        std::deque<entity_data_t *> entity_list;
 
         friend class entity<DatabaseConf>;
         friend class attached_object::base<DatabaseConf>;
         template<typename DBC, typename AttachedObjectClass, typename FC>
         friend class attached_object::base_tpl;
+        template<typename DBCFG, typename SystemClass> friend class system;
+        friend class base_system<DatabaseConf>;
     };
   } // namespace enfield
 } // namespace neam

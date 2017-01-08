@@ -62,6 +62,7 @@ namespace neam
         // type markers (mandatory)
         struct attached_object_class;
         struct attached_object_type;
+        struct system_type;
 
         // allowed attached object classes (the constexpr type_t id is mandatory):
         struct component_class { static constexpr type_t id = 0; };
@@ -111,6 +112,7 @@ namespace neam
         // type markers (mandatory)
         struct attached_object_class;
         struct attached_object_type;
+        struct system_type;
 
         // allowed attached object classes (the constexpr type_t id is mandatory):
         struct component_class { static constexpr type_t id = 0; };
@@ -163,6 +165,7 @@ namespace neam
         // type markers (mandatory)
         struct attached_object_class;
         struct attached_object_type;
+        struct system_type;
 
         // allowed attached object classes (the constexpr type_t id is mandatory):
         struct component_class { static constexpr type_t id = 0; };
