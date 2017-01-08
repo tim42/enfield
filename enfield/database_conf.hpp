@@ -66,7 +66,7 @@ namespace neam
       automanaged =         1 << 5,
 
       /// \brief grant all rights to other attached objects
-      ao_all = ao_requireable | ao_removable | ao_unsafe_getable,
+      ao_all = ao_requireable | ao_removable | ao_unsafe_getable | automanaged,
       /// \brief grant all "safe" rights to other attached objects
       ao_all_safe = ao_requireable | ao_removable,
 

@@ -90,6 +90,17 @@ namespace neam
           };
           static_assert(sizeof(id_t) == 2 * sizeof(type_t), "Incompatible id_t and type_t");
 
+          /// \brief Return true if the user required this attached object
+          bool is_user_added() const
+          {
+            return user_added;
+          }
+          /// \brief Return true if the attached object is automanaged (self destruction / self creation)
+          bool is_automanaged() const
+          {
+            return automanaged;
+          }
+
         private:
           /// \brief The entity that owns that attached object
           entity_data_t *owner;
