@@ -82,6 +82,21 @@ namespace neam
             return this->owner->db->template add_ao_dep<AttachedObject>(this->owner, this, provider);
           }
 
+          template<typename AttachedObject>
+          void unrequire()
+          {
+            static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_requireable>();
+
+            AttachedObject *ret = entity_get<AttachedObject>();
+            base_t *bptr = ret;
+            if (bptr)
+            {
+              this->owner->db->template remove_ao_dep(bptr, this->owner, this);
+              this->requires.erase(bptr);
+              bptr->required_by.erase((base_t *)this);
+            }
+          }
+
           /// \brief Require another (requireable) attached object
           /// \note circular dependencies will not be tested when calling that function but will trigger an exception when
           ///       trying to destruct the entity. Also, circular dependencies may lead to segfaults/memory corruption
