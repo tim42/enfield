@@ -55,85 +55,41 @@ Only `class_rights` can define "user-rights" (rights given to the public API of 
  
 When an unauthorized operation is done (aka. an operation not explicitly permitted in the rights), the compilation aborts.
 
-Here is the configuration for a "pure" ECS (without concepts):
+# systems
+
+Enfield systems have been designed to be heavily threadable, super lightweight (without much overhead) and easy to create.
+
 ```c++
-struct ecs_database_conf
+class auto_updatabe_system : public neam::enfield::system<db_conf, auto_updatabe_system>
 {
-  // type markers (mandatory)
-  struct attached_object_class;
-  struct attached_object_type;
+  public:
+    system(neam::enfield::database<db_conf> &_db)
+      : neam::enfield::system<db_conf, auto_updatabe_system>(_db)
+    {}
 
-  // allowed attached object classes (the constexpr type_t id is mandatory):
-  // here we only allow a component class
-  struct component_class { static constexpr enfield::type_t id = 0; };
+  private:
+    /// \brief Called at the start of a "frame"
+    virtual void begin() final {}
 
-  // "rights" configuration:
-  template<type_t ClassId>
-  struct class_rights
-  {
-    // default configuration: (must be static constexpr)
-    static constexpr enfield::attached_object_access access = enfield::attached_object_access::all;
-  };
+    /// \brief Called for every compatible entities
+    void on_entity(auto_updatable &au)
+    {
+      au.update_all();
+    }
 
-  /// \brief Specify the rights of OtherClassId over ClassId.
-  /// In this mode, only attached_object_access::ao_* are accounted
-  /// the default is to use the class_rights as value.
-  template<type_t ClassId, type_t OtherClassId>
-  struct specific_class_rights : public class_rights<ClassId> {};
+    /// \brief Called after all the entities have been processed
+    virtual void end() final {}
 
-  /// \brief The maximum number of components
-  static constexpr uint64_t max_component_types = 2 * 64;
+    friend class neam::enfield::system<db_conf, auto_updatabe_system>;
 };
 ```
 
-And here is a conservative ECCS configuration (where concepts can't require components, but where either other components and the user can):
-```c++
-struct eccs_database_conf
-{
-  // type markers (mandatory)
-  struct attached_object_class;
-  struct attached_object_type;
+The `on_entity` function can have the signature it wants (a bit like with for_each) and the database will populate its parameters with the corresponding attached objects, skipping the entity
+if there's a missing attached object. So, if you want your system to work with any entities that have both an auto_updatable and a serializable concept:
 
-  // allowed attached object classes (the constexpr type_t id is mandatory):
-  struct component_class { static constexpr enfield::type_t id = 0; };
-  // We add a concept attached object class
-  struct concept_class { static constexpr type_t id = 1; };
+`void on_entity(auto_updatable &au, const serializable &ser)`
 
-  // "rights" configuration:
-  template<type_t ClassId>
-  struct class_rights
-  {
-    // default configuration: (must be static constexpr)
-    static constexpr enfield::attached_object_access access = enfield::attached_object_access::all;
-  };
 
-  /// \brief Specify the rights of OtherClassId over ClassId.
-  /// In this mode, only attached_object_access::ao_* are accounted
-  /// the default is to use the class_rights as value.
-  template<type_t ClassId, type_t OtherClassId>
-  struct specific_class_rights : public class_rights<ClassId> {};
-
-  /// \brief The maximum number of components
-  static constexpr uint64_t max_component_types = 2 * 64;
-};
-
-// As concepts can't be created outside themselves, they can only be getable by other attached objects, and marked as automanaged
-template<>
-struct eccs_database_conf::class_rights<eccs_database_conf::concept_class::id>
-{
-  static constexpr enfield::attached_object_access access = enfield::attached_object_access::automanaged
-                                                          | enfield::attached_object_access::ao_unsafe_getable
-                                                          | enfield::attached_object_access::user_getable;
-};
-
-// The following specialization disallow concepts to require (and thus create) components
-// Components still follow the general rules, and can be required/created by other components, the user and every other attached object classes that don't have specific class rights.
-template<>
-struct eccs_database_conf::specific_class_rights<eccs_database_conf::component_class::id, eccs_database_conf::concept_class::id>
-{
-  static constexpr enfield::attached_object_access access = enfield::attached_object_access::ao_unsafe_getable;
-};
-```
 
 ---
 
