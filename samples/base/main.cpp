@@ -18,10 +18,6 @@
 // that add them (bwah)).
 using db_conf = neam::enfield::db_conf::conservative_eccs;
 
-// Alias for a component base class
-template<typename FinalClass>
-using component = neam::enfield::component<db_conf, FinalClass>;
-
 /// \brief Defines the "printable" concept
 /// The contract of the printable concept is that a method [...] print([...]) const is present in the class implementing the concept,
 /// and that method can be called without argument.

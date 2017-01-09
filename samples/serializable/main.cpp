@@ -12,11 +12,6 @@
 
 using db_conf = neam::enfield::db_conf::conservative_eccs;
 
-template<typename FinalClass>
-using component = neam::enfield::component<db_conf, FinalClass>;
-
-template<typename FinalClass>
-using concept = neam::enfield::concept<db_conf, FinalClass>;
 
 // Easy alias for the serializable concept. We want to serialize to JSON and use the current database conf
 // NOTE: The neam backend (the default one) is WAY faster than the JSON backend and is recommended (except when you need to debug)
