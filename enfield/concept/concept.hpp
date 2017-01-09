@@ -55,12 +55,12 @@ namespace neam
     /// The concept_logic class defines the communication interface from the concept provider (the class that inherit from your concept_provider class) and my_concept,
     /// it should not be used to constrain the concept provider to have a specific API as your concept_provider knows the exact type of the concept provider. (use get_base_as < ConceptProvider > ())
     template<typename DatabaseConf, typename ConceptType>
-    class base_concept : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
+    class concept : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
     {
       public:
         using param_t = typename attached_object::base<DatabaseConf>::param_t;
 
-        virtual ~base_concept() = default;
+        virtual ~concept() = default;
 
       protected:
         using base_t = attached_object::base<DatabaseConf>;
@@ -79,7 +79,7 @@ namespace neam
 
           protected:
             base_concept_logic(base_t *_base)
-             : concept(base_concept::create_self(*_base)), base(_base)
+             : concept(concept::create_self(*_base)), base(_base)
             {
               concept.concept_providers.push_back(this);
             }
@@ -103,7 +103,7 @@ namespace neam
         };
 
       protected:
-        base_concept(param_t _param)
+        concept(param_t _param)
           : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
           (
             _param,

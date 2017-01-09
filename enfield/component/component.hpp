@@ -42,15 +42,15 @@ namespace neam
     /// \tparam DatabaseConf is the configuration object for the database
     /// \tparam ComponentType is the final component type
     template<typename DatabaseConf, typename ComponentType>
-    class base_component : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class, ComponentType>
+    class component : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class, ComponentType>
     {
       public:
         using param_t = typename attached_object::base<DatabaseConf>::param_t;
 
-        virtual ~base_component() = default;
+        virtual ~component() = default;
 
       protected:
-        base_component(param_t _param)
+        component(param_t _param)
           : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class, ComponentType>
           (
             _param,

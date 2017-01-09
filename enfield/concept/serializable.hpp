@@ -47,7 +47,7 @@ namespace neam
 {
   namespace enfield
   {
-    namespace concept
+    namespace concepts
     {
       struct _from_deserialization {};
 
@@ -57,10 +57,10 @@ namespace neam
 
       /// \brief Define a serializable concept that uses persistence
       template<typename DatabaseConf, typename Backend = cr::persistence_backend::neam>
-      class serializable : public base_concept<DatabaseConf, serializable<DatabaseConf, Backend>>
+      class serializable : public concept<DatabaseConf, serializable<DatabaseConf, Backend>>
       {
         private:
-          using concept = base_concept<DatabaseConf, serializable<DatabaseConf, Backend>>;
+          using concept = neam::enfield::concept<DatabaseConf, serializable<DatabaseConf, Backend>>;
 
           using vct_t = typename std::conditional<std::is_same<Backend, cr::persistence_backend::json>::value, std::string, std::vector<uint8_t>>::type;
           using data_map_t = std::pair<std::vector<type_t>, std::map<type_t, vct_t>>;
@@ -187,11 +187,11 @@ namespace neam
           /// entity.add<serializable::deserialization_marker>([neam::cr::raw_data *]);
           /// entity.remove<serializable::deserialization_marker>();
           /// \endcode
-          class deserialization_marker : public base_component<DatabaseConf, deserialization_marker>, public concept_logic
+          class deserialization_marker : public component<DatabaseConf, deserialization_marker>, public concept_logic
           {
             public:
               deserialization_marker(typename concept::param_t p, entity<DatabaseConf> *_entity, const cr::raw_data *_data)
-                : base_component<DatabaseConf, deserialization_marker>(p), concept_logic(this)
+                : component<DatabaseConf, deserialization_marker>(p), concept_logic(this)
               {
                 // Let the deserialization happen:
                 data_map_t *data = cr::persistence::deserialize<Backend, data_map_t>(*_data);
@@ -290,7 +290,7 @@ namespace neam
         serializable::require_map.emplace(type_id<ConceptProvider, typename DatabaseConf::attached_object_type>::id, &require_concept_provider);
         return 0;
       }();
-    } // namespace concept
+    } // namespace concepts
   } // namespace enfield
 } // namespace neam
 

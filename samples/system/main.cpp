@@ -54,6 +54,7 @@ int main(int, char **)
   neam::cr::chrono chr;
 
   // run the systems for quite a bit
+  // NOTE: this could be multithreaded for a lower run time, but as we're quite fast, I guess that's OK
   for (size_t i = 0; i < frame_count; ++i)
     db.run_systems();
 

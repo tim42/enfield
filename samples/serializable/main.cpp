@@ -13,28 +13,30 @@
 using db_conf = neam::enfield::db_conf::conservative_eccs;
 
 template<typename FinalClass>
-using component = neam::enfield::base_component<db_conf, FinalClass>;
+using component = neam::enfield::component<db_conf, FinalClass>;
 
 template<typename FinalClass>
-using concept = neam::enfield::base_concept<db_conf, FinalClass>;
+using concept = neam::enfield::concept<db_conf, FinalClass>;
 
 // Easy alias for the serializable concept. We want to serialize to JSON and use the current database conf
 // NOTE: The neam backend (the default one) is WAY faster than the JSON backend and is recommended (except when you need to debug)
-using serializable = neam::enfield::concept::serializable<db_conf, neam::cr::persistence_backend::json>;
+using serializable = neam::enfield::concepts::serializable<db_conf, neam::cr::persistence_backend::json>;
 
 /// \brief A component + a concept provider
 /// \note For most concepts, you can privately inherit from the concept::concept_provider<...> class.
-class truc2 : public component<truc2>, private serializable::concept_provider<truc2>
+class truc2 : public neam::enfield::component<db_conf, truc2>, private serializable::concept_provider<truc2>
 {
+  private:
+    using component = neam::enfield::component<db_conf, truc2>;
   public:
     truc2(param_t p)
-      : component<truc2>(p),
+      : component(p),
         serializable::concept_provider<truc2>(this)
     {
     }
 
-    truc2(param_t p, neam::enfield::concept::from_deserialization_t)
-      : component<truc2>(p),
+    truc2(param_t p, neam::enfield::concepts::from_deserialization_t)
+      : component(p),
         serializable::concept_provider<truc2>(this)
     {
       // unserialize the data member. This effectively performs an assignation.
@@ -67,19 +69,21 @@ class truc2 : public component<truc2>, private serializable::concept_provider<tr
 };
 
 /// \brief Another component + a concept provider
-class truc : public component<truc>, private serializable::concept_provider<truc>
+class truc : public neam::enfield::component<db_conf, truc>, private serializable::concept_provider<truc>
 {
+  private:
+    using component = neam::enfield::component<db_conf, truc>;
   public:
     truc(param_t p)
-      : component<truc>(p),
+      : component(p),
         serializable::concept_provider<truc>(this)
     {
       // We require truc2
       require<truc2>();
     }
 
-    truc(param_t p, neam::enfield::concept::from_deserialization_t t)
-      : component<truc>(p),
+    truc(param_t p, neam::enfield::concepts::from_deserialization_t t)
+      : component(p),
         serializable::concept_provider<truc>(this)
     {
       // unserialize data

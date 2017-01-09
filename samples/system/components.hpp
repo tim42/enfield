@@ -38,10 +38,10 @@
 namespace sample
 {
   /// \brief Deadly stupid and simple component that does nothing
-  class comp_1 : public neam::enfield::base_component<sample::db_conf, comp_1>
+  class comp_1 : public neam::enfield::component<sample::db_conf, comp_1>
   {
     private:
-      using component = neam::enfield::base_component<sample::db_conf, comp_1>;
+      using component = neam::enfield::component<sample::db_conf, comp_1>;
     public:
       comp_1(param_t p) : component(p)
       {
@@ -51,11 +51,11 @@ namespace sample
   };
 
   /// \brief Deadly stupid and simple component that is auto-updatable
-  class comp_2 : public neam::enfield::base_component<sample::db_conf, comp_2>,
+  class comp_2 : public neam::enfield::component<sample::db_conf, comp_2>,
     private auto_updatable::concept_provider<comp_2>
   {
     private:
-      using component = neam::enfield::base_component<sample::db_conf, comp_2>;
+      using component = neam::enfield::component<sample::db_conf, comp_2>;
     public:
       comp_2(param_t p)
         : component(p), auto_updatable::concept_provider<comp_2>(this),

@@ -8,21 +8,22 @@
 #include <enfield/tools/logger/logger.hpp>
 
 #include <enfield/enfield.hpp>
+#include <enfield/concept/serializable.hpp>
 
-using db_conf = neam::enfield::db_conf::conservative_eccs;
-template<typename FinalClass>
-using component = neam::enfield::base_component<db_conf, FinalClass>;
-template<typename FinalClass>
-using concept = neam::enfield::base_concept<db_conf, FinalClass>;
+using db_conf = neam::enfield::db_conf::eccs;
+
+using serializable = neam::enfield::concepts::serializable<db_conf, neam::cr::persistence_backend::json>;
 
 /// \brief Defines the "printable" concept
-class printable : public concept<printable>
+class printable : public neam::enfield::concept<db_conf, printable>
 {
   private:
-    class concept_logic : public concept<printable>::base_concept_logic
+    using concept = neam::enfield::concept<db_conf, printable>;
+
+    class concept_logic : public concept::base_concept_logic
     {
       protected:
-        concept_logic(base_t *_base) : concept<printable>::base_concept_logic(_base) {}
+        concept_logic(base_t *_base) : concept::base_concept_logic(_base) {}
 
         virtual void _do_print() const = 0;
         friend class printable;
@@ -40,7 +41,7 @@ class printable : public concept<printable>
     };
 
   public:
-    printable(param_t p) : concept<printable>(p) {}
+    printable(param_t p) : concept(p) {}
 
     void print_all() const
     {
@@ -58,19 +59,57 @@ class printable : public concept<printable>
     }
 
     // Mandatory
-    friend concept<printable>;
+    friend concept;
 };
 
+/// \brief A system
+class truc2;
+class printable_sys : public neam::enfield::system<db_conf, printable_sys>
+{
+  private:
+    using system = neam::enfield::system<db_conf, printable_sys>;
+  public:
+    printable_sys(neam::enfield::database<db_conf> &_db) : system(_db) {}
+
+  private:
+    virtual void begin() final {}
+
+    void on_entity(printable &prt)
+    {
+      prt.print_all();
+    }
+
+    virtual void end() final {}
+
+    friend system;
+};
 
 /// \brief A component + a concept provider
 /// \note For most concepts, you can privately inherit from the concept::concept_provider<...> class.
-class truc2 : public component<truc2>, private printable::concept_provider<truc2>
+class truc2 : public neam::enfield::component<db_conf, truc2>, private printable::concept_provider<truc2>, private serializable::concept_provider<truc2>
 {
+  private:
+    using component = neam::enfield::component<db_conf, truc2>;
   public:
     truc2(param_t p)
-      : component<truc2>(p),
-        printable::concept_provider<truc2>(this)
+      : component(p),
+        printable::concept_provider<truc2>(this),
+        serializable::concept_provider<truc2>(this)
     {
+    }
+
+    truc2(param_t p, neam::enfield::concepts::from_deserialization_t)
+      : component(p),
+        printable::concept_provider<truc2>(this),
+        serializable::concept_provider<truc2>(this)
+    {
+      print("deser !");
+      auto *ret = _get_persistent_data();
+      for (const auto &it : *ret)
+      {
+        neam::cr::out.log() << LOGGER_INFO << "  { " << it.first << ", " << it.second << " }" << std::endl;
+      }
+      delete ret;
     }
 
     /// \brief Print a message
@@ -80,42 +119,80 @@ class truc2 : public component<truc2>, private printable::concept_provider<truc2
     {
       neam::cr::out.log() << LOGGER_INFO << hello_message << ": truc2" << std::endl;
     }
+
+    std::map<int, int> get_data_to_serialize() const
+    {
+      return
+      {
+        {42, 41},
+        {21, 21}
+      };
+    }
 };
 
 /// \brief Another component + a concept provider
-class truc : public component<truc>, private printable::concept_provider<truc>
+class truc : public neam::enfield::component<db_conf, truc>, private printable::concept_provider<truc>, private serializable::concept_provider<truc>
 {
+  private:
+    using component = neam::enfield::component<db_conf, truc>;
   public:
     truc(param_t p)
-      : component<truc>(p),
-        printable::concept_provider<truc>(this)
+      : component(p),
+        printable::concept_provider<truc>(this),
+        serializable::concept_provider<truc>(this)
     {
       require<truc2>().print("greetings from truc::truc");
     }
 
+    truc(param_t p, neam::enfield::concepts::from_deserialization_t)
+      : component(p),
+        printable::concept_provider<truc>(this),
+        serializable::concept_provider<truc>(this)
+    {
+      require<truc2>(neam::enfield::concepts::from_deserialization_t()).print("greetings from truc::truc");
+      unrequire<truc2>();
+    }
+
     std::string print() const
     {
-      get_required<truc2>().print("greetings from truc::print");
+//       get_required<truc2>().print("greetings from truc::print");
 
       neam::cr::out.log() << LOGGER_INFO << "hello: truc" << std::endl;
 
       return "truc";
     }
+
+    int get_data_to_serialize() const { return -1; }
 };
+
 
 int main(int, char **)
 {
   neam::cr::out.log_level = neam::cr::stream_logger::verbosity_level::debug;
 
   neam::enfield::database<db_conf> db;
+
+  db.add_system<printable_sys>();
+
   auto entity = db.create_entity();
 
   entity.add<truc>().print();
 
-  entity.get<truc2>()->print();
-  neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
+//   entity.get<truc2>()->print();
+//   neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
 
-  entity.get<printable>()->print_all();
+  neam::cr::raw_data dt;
+  db.for_each([&dt](serializable &s)
+  {
+    dt = s.serialize();
+//     neam::cr::out.log() << LOGGER_INFO << (char *)dt.data << std::endl;
+  });
+
+  auto entity2 = db.create_entity();
+  entity2.add<serializable::deserialization_marker>(&entity2, &dt);
+  entity2.remove<serializable::deserialization_marker>();
+
+  db.run_systems();
 
   entity.remove<truc>();
 
@@ -123,15 +200,15 @@ int main(int, char **)
   // entity.add<printable>();
   // entity.remove<printable>();
 
-  neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
-  neam::cr::out.log() << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
+//   neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
+//   neam::cr::out.log() << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
 
   entity.add<truc>();
   entity.add<truc2>();
   entity.remove<truc>();
 
-  neam::cr::out.log() << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
-  neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
+//   neam::cr::out.log() << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
+//   neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
 
   return 0;
 }

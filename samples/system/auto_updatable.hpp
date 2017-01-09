@@ -37,11 +37,11 @@
 
 namespace sample
 {
-  /// \brief Defines the "auto-updatable" concept
-  class auto_updatable : public neam::enfield::base_concept<db_conf, auto_updatable>
+  /// \brief Defines the "auto-updatable" concept + system
+  class auto_updatable : public neam::enfield::concept<db_conf, auto_updatable>
   {
     private:
-      using concept = neam::enfield::base_concept<db_conf, auto_updatable>;
+      using concept = neam::enfield::concept<db_conf, auto_updatable>;
       class concept_logic : public concept::base_concept_logic
       {
         protected:

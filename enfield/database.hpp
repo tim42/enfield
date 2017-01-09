@@ -62,6 +62,8 @@ namespace neam
     };
 
     /// \brief Where components are stored
+    /// \warning The database isn't thread safe yet, except the run_systems() call
+    /// \note The way the database perform allocations is really bad and should be improved
     /// \tparam DatabaseConf The database configuration (default_database_conf should be more than correct for most usages)
     template<typename DatabaseConf>
     class database

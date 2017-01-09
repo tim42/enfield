@@ -9,9 +9,6 @@
 
 #include <enfield/enfield.hpp>
 
-// I will use aliases to make my life easier.
-namespace enfield = neam::enfield;
-
 // The db configuration tells enfield how to create the database. Most (if not all) is done at compile-time,
 // so the configured DB benefit from the same optimisations as if it were coded from the start with that configuration in mind.
 //
@@ -19,31 +16,28 @@ namespace enfield = neam::enfield;
 // is because with that configuration concepts can't require components. (a compilation error is issued).
 // You can create your own configuration for your specific needs. (like tags aren't included in enfield, but if you really like them you can create a configuration
 // that add them (bwah)).
-using db_conf = enfield::db_conf::conservative_eccs;
+using db_conf = neam::enfield::db_conf::conservative_eccs;
 
 // Alias for a component base class
 template<typename FinalClass>
-using component = enfield::base_component<db_conf, FinalClass>;
-
-// Alias for a concept base class
-template<typename FinalClass>
-using concept = enfield::base_concept<db_conf, FinalClass>;
+using component = neam::enfield::component<db_conf, FinalClass>;
 
 /// \brief Defines the "printable" concept
 /// The contract of the printable concept is that a method [...] print([...]) const is present in the class implementing the concept,
 /// and that method can be called without argument.
 ///
 /// truc and truc2 are "printable" and thus have a print method, but both have a different signature.
-class printable : public concept<printable>
+class printable : public neam::enfield::concept<db_conf, printable>
 {
+    using concept = neam::enfield::concept<db_conf, printable>;
   private:
     /// \brief concept_logic is the class that defines the communication interface of the concept provider <-> the concept.
     /// It can provide functions to manipulate the concept (otherwise inaccessible to the concept provider) and let the concept
     /// make calls/retrieve data of the concept provider.
-    class concept_logic : public concept<printable>::base_concept_logic
+    class concept_logic : public concept::base_concept_logic
     {
       protected:
-        concept_logic(base_t *_base) : concept<printable>::base_concept_logic(_base) {}
+        concept_logic(base_t *_base) : concept::base_concept_logic(_base) {}
 
         virtual void _do_print() const = 0;
         friend class printable;
@@ -69,7 +63,7 @@ class printable : public concept<printable>
 
   public:
     // standard enfield constructor
-    printable(param_t p) : concept<printable>(p) {}
+    printable(param_t p) : concept(p) {}
 
     /// \brief Call print() on all printable attached objects
     void print_all() const
@@ -89,16 +83,18 @@ class printable : public concept<printable>
       neam::cr::out.log() << LOGGER_INFO << " ------ ------------ ------" << std::endl;
     }
 
-    friend concept<printable>;
+    friend concept;
 };
 
 /// \brief A component + a concept provider
 /// \note For most concepts, you can privately inherit from the concept::concept_provider<...> class.
-class truc2 : public component<truc2>, private printable::concept_provider<truc2>
+class truc2 : public neam::enfield::component<db_conf, truc2>, private printable::concept_provider<truc2>
 {
+  private:
+    using component = neam::enfield::component<db_conf, truc2>;
   public:
     truc2(param_t p)
-      : component<truc2>(p),
+      : component(p),
         printable::concept_provider<truc2>(this)
     {
     }
@@ -113,11 +109,13 @@ class truc2 : public component<truc2>, private printable::concept_provider<truc2
 };
 
 /// \brief Another component + a concept provider
-class truc : public component<truc>, private printable::concept_provider<truc>
+class truc : public neam::enfield::component<db_conf, truc>, private printable::concept_provider<truc>
 {
+  private:
+    using component = neam::enfield::component<db_conf, truc>;
   public:
     truc(param_t p)
-      : component<truc>(p),
+      : component(p),
         printable::concept_provider<truc>(this)
     {
       // require another component. (could also be any other kind of attached object a component have the right to require)
@@ -156,7 +154,7 @@ int main(int, char **)
   neam::cr::out.log_level = neam::cr::stream_logger::verbosity_level::debug;
 
   // create a database using the db_conf configuration
-  enfield::database<db_conf> db;
+  neam::enfield::database<db_conf> db;
 
   // create an entity
   auto entity = db.create_entity();
@@ -201,7 +199,7 @@ int main(int, char **)
 
 
   // perform a query on the db: it will return every printable whose entity has either a truc or a truc2 component
-  const auto query = db.query<printable>().filter<truc2, truc>(enfield::query_condition::any);
+  const auto query = db.query<printable>().filter<truc2, truc>(neam::enfield::query_condition::any);
 
   neam::cr::out.log() << LOGGER_INFO << query.result.size() << std::endl;
 
