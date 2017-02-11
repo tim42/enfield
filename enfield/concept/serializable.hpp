@@ -43,6 +43,8 @@
 #include "../persistence/persistence/stl/vector.hpp"     // for persistence/std::vector<>
 #include "../persistence/persistence/stl/string.hpp"     // for persistence/std::string<>
 
+#include "../tools/uninitialized.hpp"
+
 namespace neam
 {
   namespace enfield
@@ -117,11 +119,11 @@ namespace neam
               }
 
               /// \brief Return the deserialized data. The return type is exactly the same as get_data_to_serialize()
-              /// \warning DO NOT FORGET TO DELETE THE RETURN VALUE
+              /// \note If you have move assignement (either user def or default), it will be faster
               /// \note Throw an exception if called and that there is no persistent data or if that data is invalid
               /// \see assign_persistent_data()
               /// \see has_persistent_data()
-              auto _get_persistent_data() const -> const auto *
+              auto get_persistent_data() const -> auto
               {
                 auto *ptr = this->get_concept().persistent_data;
                 if (ptr)
@@ -131,33 +133,30 @@ namespace neam
                   if (it != ptr->second.end())
                   {
                     using data_t = typename std::remove_reference<typename std::remove_cv<decltype(((ConceptProvider*)(nullptr))->get_data_to_serialize())>::type>::type;
-                    return cr::persistence::deserialize<Backend, data_t>(cr::raw_data(it->second.size(), (int8_t *)it->second.data()));
+                    cr::uninitialized<data_t> data;
+                    if (cr::persistence::deserialize<Backend, data_t>(cr::raw_data(it->second.size(), (int8_t *)it->second.data()), &data))
+                    {
+                      data.call_destructor(true);
+                      // return a temporary
+                      return data_t(std::move(static_cast<data_t &>(data)));
+                    }
+                    throw exception_tpl<concept_provider>("get_persistent_data() invalid data", __FILE__, __LINE__);
                   }
-
                   throw exception_tpl<concept_provider>("get_persistent_data() no data found for that concept provider", __FILE__, __LINE__);
                 }
                 throw exception_tpl<concept_provider>("get_persistent_data() called while not deserializing", __FILE__, __LINE__);
               }
 
-              /// \brief Assign the persistent data to something
-              /// \note this is the prefered way to retrieve the data, as it is safe and won't leak
+              /// \brief Assign the persistent data to an already constructed object
+              /// \note If you have move assignement (either user def or default), it will be faster
               /// \note Throw an exception if called and that there is no persistent data or if that data is invalid
+              /// \see get_persistent_data()
               /// \see has_persistent_data()
               template<typename Type>
               void assign_persistent_data(Type &&type) const
               {
-                auto *ptr = _get_persistent_data();
-                try
-                {
-                  type = *ptr;
-                }
-                catch (...)
-                {
-                  delete ptr;
-                  throw;
-                }
-                delete ptr;
-              };
+                type = std::move(get_persistent_data());
+              }
 
             private:
               virtual serialized_ao _do_serialize() final
@@ -194,12 +193,16 @@ namespace neam
                 : component<DatabaseConf, deserialization_marker>(p), concept_logic(this)
               {
                 // Let the deserialization happen:
-                data_map_t *data = cr::persistence::deserialize<Backend, data_map_t>(*_data);
-                if (data)
-                  this->get_concept().deserialize(*_entity, *data);
+                cr::uninitialized<data_map_t> data;
+                if (cr::persistence::deserialize<Backend, data_map_t>(*_data, &data))
+                {
+                  data.call_destructor(true);
+                  this->get_concept().deserialize(*_entity, data);
+                }
                 else
+                {
                   throw exception_tpl<deserialization_marker>("deserialization_marker() Invalid data", __FILE__, __LINE__);
-                delete data;
+                }
               }
 
             private:
