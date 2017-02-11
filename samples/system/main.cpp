@@ -27,7 +27,7 @@ void init_entities(neam::enfield::database<sample::db_conf> &db, std::list<neam:
 
     // insert a bunch of attached objects (some of which are auto-updatable)
     entity.add<sample::comp_1>();
-    if (i % 2 == 0)
+//     if (i % 2 == 0)
       entity.add<sample::comp_2>();
   }
 }
@@ -58,11 +58,11 @@ int main(int, char **)
   for (size_t i = 0; i < frame_count; ++i)
     db.run_systems();
 
-  const float dt = chr.delta();
+  const double dt = chr.delta();
 
   neam::cr::out.log() << LOGGER_INFO << "done."
-                      "Average frame duration: " << ((dt / float(frame_count)) * 1000.f) << "ms, "
-                      "time per entity: " << ((dt / float(frame_count * entity_count)) * 1000.f) << "ms" << std::endl;
+                      "Average frame duration: " << ((dt / double(frame_count)) * 1000.) << "ms, "
+                      "time per entity: " << ((dt / double(frame_count * entity_count)) * 1000.) << "ms" << std::endl;
 
   // die
   return 0;

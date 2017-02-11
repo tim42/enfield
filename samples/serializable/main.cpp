@@ -36,7 +36,10 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private serializa
     {
       // unserialize the data member. This effectively performs an assignation.
       if (has_persistent_data())
-        assign_persistent_data(data);
+      {
+        data = get_persistent_data();
+        //assign_persistent_data(data);
+      }
 
       print("deserialized !");
     }
@@ -129,11 +132,12 @@ int main(int, char **)
   t2->print("before serialization");
 
   neam::cr::raw_data serialized_data;
-  db.for_each([&serialized_data](serializable &s)
+  db.for_each([&serialized_data, &db](serializable &s)
   {
     serialized_data = s.serialize();
     neam::cr::out.log() << LOGGER_INFO << "serialized data:" << std::endl;
     neam::cr::out.log() << LOGGER_INFO << (char *)serialized_data.data << std::endl;
+    db.break_for_each();
   });
 
   // This will destroy both truc and truc2

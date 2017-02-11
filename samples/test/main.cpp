@@ -104,12 +104,11 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private printable
         serializable::concept_provider<truc2>(this)
     {
       print("deser !");
-      auto *ret = _get_persistent_data();
-      for (const auto &it : *ret)
+      std::map<int, int> ret = get_persistent_data();
+      for (const auto &it : ret)
       {
         neam::cr::out.log() << LOGGER_INFO << "  { " << it.first << ", " << it.second << " }" << std::endl;
       }
-      delete ret;
     }
 
     /// \brief Print a message
@@ -182,9 +181,10 @@ int main(int, char **)
 //   neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
 
   neam::cr::raw_data dt;
-  db.for_each([&dt](serializable &s)
+  db.for_each([&dt, &db](serializable &s)
   {
     dt = s.serialize();
+    db.break_for_each();
 //     neam::cr::out.log() << LOGGER_INFO << (char *)dt.data << std::endl;
   });
 
