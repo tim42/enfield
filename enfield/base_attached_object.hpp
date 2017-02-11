@@ -93,7 +93,6 @@ namespace neam
             {
               this->owner->db->template remove_ao_dep(bptr, this->owner, this);
               this->requires.erase(bptr);
-              bptr->required_by.erase((base_t *)this);
             }
           }
 
