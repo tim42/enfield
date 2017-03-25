@@ -9,6 +9,7 @@
 
 #include <enfield/enfield.hpp>
 #include <enfield/concept/serializable.hpp> // we need the serializable builtin concept
+#include <enfield/component/name.hpp> // for the name component
 
 using db_conf = neam::enfield::db_conf::conservative_eccs;
 
@@ -16,6 +17,11 @@ using db_conf = neam::enfield::db_conf::conservative_eccs;
 // Easy alias for the serializable concept. We want to serialize to JSON and use the current database conf
 // NOTE: The neam backend (the default one) is WAY faster than the JSON backend and is recommended (except when you need to debug)
 using serializable = neam::enfield::concepts::serializable<db_conf, neam::cr::persistence_backend::json>;
+
+// create a serializable name component
+// If you remove the "serializable::concept_provider", the name component will work the same, but won't be serializable.
+// You can even add more concept_providers to the list if you want (like editable).
+using name_component = neam::enfield::components::name<db_conf, serializable::concept_provider>;
 
 /// \brief A component + a concept provider
 /// \note For most concepts, you can privately inherit from the concept::concept_provider<...> class.
@@ -42,6 +48,11 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private serializa
       }
 
       print("deserialized !");
+    }
+
+    void refresh_from_deserialization()
+    {
+        data = get_persistent_data();
     }
 
     /// \brief Print a message
@@ -93,6 +104,11 @@ class truc : public neam::enfield::component<db_conf, truc>, private serializabl
       require<truc2>(t);
     }
 
+    void refresh_from_deserialization()
+    {
+        dummy = get_persistent_data();
+    }
+
     std::string print() const
     {
       get_required<truc2>().print("greetings from truc::print");
@@ -120,6 +136,7 @@ int main(int, char **)
   auto entity = db.create_entity();
 
   entity.add<truc>();
+  entity.add<name_component>().data = "my awesome name !";
 
   truc2 *t2 = entity.get<truc2>();
   t2->data =

@@ -9,6 +9,7 @@
 
 #include <enfield/enfield.hpp>
 #include <enfield/concept/serializable.hpp>
+#include <enfield/component/data_holder.hpp>
 
 using db_conf = neam::enfield::db_conf::eccs;
 
@@ -111,6 +112,11 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private printable
       }
     }
 
+    void refresh_from_deserialization()
+    {
+      // You should update the state of the component here
+    }
+
     /// \brief Print a message
     /// \note the printable concept DOES NOT constrain the concept provider class to have a specific API.
     ///       all it asks is that you can do a xxx.print(); without causing a compilation error.
@@ -130,7 +136,8 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private printable
 };
 
 /// \brief Another component + a concept provider
-class truc : public neam::enfield::component<db_conf, truc>, private printable::concept_provider<truc>, private serializable::concept_provider<truc>
+class truc : public neam::enfield::component<db_conf, truc>,
+  private printable::concept_provider<truc>, private serializable::concept_provider<truc>
 {
   private:
     using component = neam::enfield::component<db_conf, truc>;
@@ -162,6 +169,11 @@ class truc : public neam::enfield::component<db_conf, truc>, private printable::
     }
 
     int get_data_to_serialize() const { return -1; }
+
+    void refresh_from_deserialization()
+    {
+      // You should update the state of the component here
+    }
 };
 
 

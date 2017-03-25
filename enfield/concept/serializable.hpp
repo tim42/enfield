@@ -51,13 +51,16 @@ namespace neam
   {
     namespace concepts
     {
-      struct _from_deserialization {};
+      struct _from_deserialization;
 
       /// \brief Indicate that the constructor is called from a deserialized object
       /// Usage: from_deserialization_t().
       using from_deserialization_t = _from_deserialization *;
 
       /// \brief Define a serializable concept that uses persistence
+      /// You can create an entity from a raw data by using serializable::deserialize(my_raw_data);
+      /// You can refresh an entity (that alread have a serializable attached object) by doing : entity.get< serializable >()->refresh(entity, my_raw_data);
+      /// 
       template<typename DatabaseConf, typename Backend = cr::persistence_backend::neam>
       class serializable : public concept<DatabaseConf, serializable<DatabaseConf, Backend>>
       {
@@ -83,6 +86,8 @@ namespace neam
             protected:
               /// \brief Internal only, perform the serialization of the AO
               virtual serialized_ao _do_serialize() = 0;
+              virtual void _do_refresh_serializable_data() = 0;
+              virtual void _do_remove(entity<DatabaseConf>& entity) = 0;
 
             private:
               bool _is_user_added() const
@@ -97,6 +102,7 @@ namespace neam
           /// \brief Things wanting to be serializable / deserialized should inherit from this
           /// The API contract the attached object implementing that concept must respect is:
           ///  - having a get_data_to_serialize() that does not take argument and return an object (const ref or whatever) that is de/serializable with persistence.
+          ///  - having a refresh_from_deserialization() method that does not take arguments (that will be called when there's new data for the attached object)
           ///  - have a constructor that takes a from_deserialization_t argument
           template<typename ConceptProvider>
           class concept_provider : public concept_logic
@@ -159,7 +165,7 @@ namespace neam
               }
 
             private:
-              virtual serialized_ao _do_serialize() final
+              virtual serialized_ao _do_serialize() final override
               {
                 ConceptProvider &base = this->template get_base_as<ConceptProvider>();
                 cr::raw_data dt = cr::persistence::serialize<Backend>(base.get_data_to_serialize());
@@ -168,6 +174,17 @@ namespace neam
                   base.object_type_id,
                   vct_t(dt.data, dt.data + dt.size + _dummy_)
                 };
+              }
+
+              void _do_refresh_serializable_data() final override
+              {
+                ConceptProvider &base = this->template get_base_as<ConceptProvider>();
+                base.refresh_from_deserialization();
+              }
+
+              void _do_remove(entity<DatabaseConf> &entity) final override
+              {
+                entity.template remove<ConceptProvider>();
               }
 
               /// \brief Perform the require in the name of serializable<>
@@ -206,7 +223,7 @@ namespace neam
               }
 
             private:
-              virtual serialized_ao _do_serialize() final
+              virtual serialized_ao _do_serialize() final override
               {
                 return
                 {
@@ -214,6 +231,13 @@ namespace neam
                   vct_t()
                 };
               };
+
+              void _do_remove(entity<DatabaseConf> &entity) final override
+              {
+                entity.template remove<deserialization_marker>();
+              }
+
+              void _do_refresh_serializable_data() final override {}
           };
 
         public:
@@ -246,24 +270,69 @@ namespace neam
             return cr::persistence::serialize<Backend>(data_map);
           }
 
+          /// \brief Create a new entity and deserialize the attached objects from the raw data
+          static entity<DatabaseConf> deserialize(database<DatabaseConf> &db, const cr::raw_data &_data)
+          {
+            entity<DatabaseConf> entity = db.create_entity();
+            entity.template add<deserialization_marker>(&entity, &_data);
+            entity.template remove<deserialization_marker>();
+            return entity;
+          }
+
+          /// \brief Update an entity from raw data
+          /// \note attached objects that aren't present in the data_map will be removed (unless there's dependencies)
+          ///       attached objects that are present in the data_map but not in the entity will be created
+          void refresh(entity<DatabaseConf> &entity, const cr::raw_data &_data)
+          {
+              // Let the deserialization happen:
+              cr::uninitialized<data_map_t> data;
+              if (cr::persistence::deserialize<Backend, data_map_t>(_data, &data))
+              {
+                data.call_destructor(true);
+                deserialize(entity, data);
+              }
+              else
+              {
+                throw exception_tpl<serializable>("refresh(): Invalid data", __FILE__, __LINE__);
+              }
+          }
+
         private:
           void deserialize(entity<DatabaseConf> &entity, const data_map_t &data_map)
           {
+            // generate the list of present attached objects
+            std::map<type_t, concept_logic&> present_attached_objects;
+            this->for_each_concept_provider([&present_attached_objects](concept_logic &prov)
+            {
+              present_attached_objects.emplace(prov.get_base().object_type_id, prov);
+            });
+
+
             // We somehow got our data_map, all we need is require components. There constructor will take care of everything else.
             persistent_data = &data_map;
             try
             {
               for (type_t it : data_map.first)
               {
-                auto fncit = require_map.find(it);
-                if (fncit != require_map.end())
+                auto pao = present_attached_objects.find(it);
+                if (pao != present_attached_objects.end())
                 {
-                  // call the require function pointer
-                  fncit->second(*this, entity);
+                  // refresh the attached object
+                  pao->second._do_refresh_serializable_data();
                 }
                 else
                 {
-                  throw exception_tpl<serializable>("deserialize(): Unable to find the corresponding attached object", __FILE__, __LINE__);
+                  // create the attached object
+                  auto fncit = require_map.find(it);
+                  if (fncit != require_map.end())
+                  {
+                    // call the require function pointer
+                    fncit->second(*this, entity);
+                  }
+                  else
+                  {
+                    throw exception_tpl<serializable>("deserialize(): Unable to find the corresponding attached object", __FILE__, __LINE__);
+                  }
                 }
               }
             }
@@ -273,8 +342,18 @@ namespace neam
               throw;
             }
             persistent_data = nullptr;
+
+            // remove extra components
+            for (auto &it : present_attached_objects)
+            {
+              if (!data_map.second.count(it.first))
+              {
+                it.second._do_remove(entity);
+              }
+            }
           }
 
+        private:
           static std::map<type_t, void (*)(serializable &, entity<DatabaseConf> &)> require_map;
           const data_map_t *persistent_data = nullptr;
 

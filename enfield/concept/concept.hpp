@@ -92,6 +92,11 @@ namespace neam
             template<typename FinalClass>
             const FinalClass &get_base_as() const { return *static_cast<const FinalClass *>(base); }
 
+            /// \brief Return the base
+            base_t &get_base() { return *base; }
+            /// \brief Return the base
+            const base_t &get_base() const { return *base; }
+
             /// \brief Return the concept class
             ConceptType &get_concept() { return concept; }
             /// \brief Return the concept class
