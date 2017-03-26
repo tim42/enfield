@@ -80,7 +80,7 @@ namespace neam
             return true;
 
           bool ok = true;
-          for (size_t i = 0; i < (DatabaseConf::max_component_types / (sizeof(uint64_t) * 8)); ++i)
+          for (size_t i = 0; i < (DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)); ++i)
             ok &= ((data->component_types[i] & this->component_mask[i]) == this->component_mask[i]);
 
           if (ok)
@@ -100,7 +100,7 @@ namespace neam
           NEAM_EXECUTE_PACK(component_mask[id_t<AttachedObjects>::id / (sizeof(uint64_t) * 8)] |= (1ul << (id_t<AttachedObjects>::id % (sizeof(uint64_t) * 8))));
         }
 
-        uint64_t component_mask[DatabaseConf::max_component_types / (sizeof(uint64_t) * 8)] = {0};
+        uint64_t component_mask[DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)] = {0};
         const type_t system_id;
 
         template<typename DBC, typename SystemClass> friend class system;

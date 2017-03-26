@@ -91,8 +91,11 @@ namespace neam
         template<type_t ClassId, typename AttachedObject>
         struct check_attached_object : no_check<true> {};
 
+        /// \brief The attached object allocator
+        using attached_object_allocator = default_attached_object_allocator;
+
         /// \brief The maximum number of components
-        static constexpr uint64_t max_component_types = 2 * 64;
+        static constexpr uint64_t max_attached_objects_types = 2 * 64;
       };
       template<>
       struct eccs::class_rights<eccs::concept_class::id>
@@ -141,8 +144,11 @@ namespace neam
         template<type_t ClassId, typename AttachedObject>
         struct check_attached_object : no_check<true> {};
 
+        /// \brief The attached object allocator
+        using attached_object_allocator = default_attached_object_allocator;
+
         /// \brief The maximum number of components
-        static constexpr uint64_t max_component_types = 2 * 64;
+        static constexpr uint64_t max_attached_objects_types = 2 * 64;
       };
       template<>
       struct conservative_eccs::class_rights<conservative_eccs::concept_class::id>
@@ -193,8 +199,11 @@ namespace neam
         template<type_t ClassId, typename AttachedObject>
         struct check_attached_object : no_check<true> {};
 
+        /// \brief The attached object allocator
+        using attached_object_allocator = default_attached_object_allocator;
+
         /// \brief The maximum number of components
-        static constexpr uint64_t max_component_types = 2 * 64;
+        static constexpr uint64_t max_attached_objects_types = 2 * 64;
       };
     } // namespace db_conf
   } // namespace enfield

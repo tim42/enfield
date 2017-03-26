@@ -89,7 +89,7 @@ namespace neam
           }
 
           template<typename DBC, typename THING> friend class concepts::serializable;
-          template<typename DBC> friend class neam::enfield::database;
+          friend typename DatabaseConf::attached_object_allocator; // allow the allocator to call the private constructor
       };
     } // namespace components
   } // namespace enfield

@@ -64,7 +64,7 @@ namespace neam
           base(entity_t **_owner, type_t _object_type_id, type_t _class_id)
             : object_type_id(_object_type_id), class_id(_class_id), owner((*_owner)->data)
           {
-            check::on_error::n_assert(object_type_id < DatabaseConf::max_component_types, "Too many attached object types for the current configuration");
+            check::on_error::n_assert(object_type_id < DatabaseConf::max_attached_objects_types, "Too many attached object types for the current configuration");
           };
 
           virtual ~base()
@@ -114,6 +114,10 @@ namespace neam
 
           friend class neam::enfield::database<DatabaseConf>;
           friend class neam::enfield::entity<DatabaseConf>;
+
+          // allow the deallocator to call the destructor
+          template<typename DBC>
+          friend void DatabaseConf::attached_object_allocator::deallocate(type_t, base<DBC> &) noexcept;
 
           template<typename DBC, typename AttachedObjectClass, typename FC>
           friend class base_tpl;

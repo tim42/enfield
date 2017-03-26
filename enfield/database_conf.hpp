@@ -90,6 +90,35 @@ namespace neam
     inline /*constexpr*/ attached_object_access &operator |= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a | (int)b); return a; }
     inline /*constexpr*/ attached_object_access &operator &= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a & (int)b); return a; }
 
+    /// \brief The default enfield allocator for attached objects (simply new/delete)
+    /// All allocators should respect the same conditions:
+    ///   - if allocate returns, it's a valid and constructed object. Otherwise: exception.
+    ///   - deallocate only takes valid objects, call the destructor and free the memory. no exception permitted.
+    /// It is guaranteed that every object with the same type id are the same final type,
+    /// hence every instance do have the same size
+    struct default_attached_object_allocator
+    {
+      /// \brief Allocate a new object, and call its constructor.
+      template<typename Object, typename... Args>
+      static Object &allocate(type_t type_id, Args &&... args);
+
+      /// \brief Destruct and deallocate the object
+      template<typename DatabaseConf>
+      static void deallocate(type_t type_id, attached_object::base<DatabaseConf> &obj) noexcept;
+    };
+
+    template<typename Object, typename... Args>
+    Object &default_attached_object_allocator::allocate(type_t, Args &&... args)
+    {
+      return *new Object(std::forward<Args>(args)...);
+    }
+
+    template<typename DatabaseConf>
+    void default_attached_object_allocator::deallocate(type_t, attached_object::base<DatabaseConf> &obj) noexcept
+    {
+      delete &obj;
+    }
+
     namespace internal
     {
       template<typename List, type_t ClassId>

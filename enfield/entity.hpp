@@ -78,7 +78,7 @@ namespace neam
           database_t * const db = nullptr;
 
           /// \brief Allow a quick query of component this entity has
-          uint64_t component_types[DatabaseConf::max_component_types / (sizeof(uint64_t) * 8)] = {0};
+          uint64_t component_types[DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)] = {0};
 
           /// \brief The list of attached_objects this entity have
           std::unordered_map<type_t, base_t *> attached_objects = std::unordered_map<type_t, base_t *>();

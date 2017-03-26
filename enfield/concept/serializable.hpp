@@ -60,7 +60,7 @@ namespace neam
       /// \brief Define a serializable concept that uses persistence
       /// You can create an entity from a raw data by using serializable::deserialize(my_raw_data);
       /// You can refresh an entity (that alread have a serializable attached object) by doing : entity.get< serializable >()->refresh(entity, my_raw_data);
-      /// 
+      /// \note This concept works with conservative eccs as it does not require<>() components (this is the reason you have to pass an entity reference to some functions)
       template<typename DatabaseConf, typename Backend = cr::persistence_backend::neam>
       class serializable : public concept<DatabaseConf, serializable<DatabaseConf, Backend>>
       {

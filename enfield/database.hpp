@@ -69,7 +69,7 @@ namespace neam
     class database
     {
       private: // check the validity of the compile-time conf
-        static_assert(DatabaseConf::max_component_types % (sizeof(uint64_t) * 8) == 0, "database's Conf::max_component_types property must be a multiple of uint64_t");
+        static_assert(DatabaseConf::max_attached_objects_types % (sizeof(uint64_t) * 8) == 0, "database's Conf::max_attached_objects_types property must be a multiple of uint64_t");
         template<typename Type>
         using rm_rcv = typename std::remove_reference<typename std::remove_cv<Type>::type>::type;
 
@@ -333,6 +333,10 @@ namespace neam
           for_each_list(func, list());
         }
 
+        /// \brief Break a for_each() loop
+        /// \warning You should only call this method inside a for_each() call.
+        ///          Otherwise you may end-up with an uncatchable exception.
+        ///
         [[noreturn]] void break_for_each() const
         {
           throw for_each_breaker();
@@ -348,7 +352,7 @@ namespace neam
           static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
 
           const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-          if (attached_object_id > DatabaseConf::max_component_types)
+          if (attached_object_id > DatabaseConf::max_attached_objects_types)
             return query_t<AttachedObject>();
 
           std::vector<AttachedObject *> ret;
@@ -385,14 +389,14 @@ namespace neam
           );
 
           // generates the mask
-          uint64_t component_mask[DatabaseConf::max_component_types / (sizeof(uint64_t) * 8)] = {0};
+          uint64_t component_mask[DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)] = {0};
           NEAM_EXECUTE_PACK(component_mask[id_t<AttachedObjects>::id / (sizeof(uint64_t) * 8)] |= (1ul << (id_t<AttachedObjects>::id % (sizeof(uint64_t) * 8))));
 
           // for each !
           for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
           {
             bool ok = true;
-            for (size_t j = 0; ok && j < (DatabaseConf::max_component_types / (sizeof(uint64_t) * 8)); ++j)
+            for (size_t j = 0; ok && j < (DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)); ++j)
               ok &= ((attached_object_db[attached_object_id][i]->owner->component_types[j] & component_mask[j]) == component_mask[j]);
 
             if (ok)
@@ -431,14 +435,14 @@ namespace neam
           );
 
           // generates the mask
-          uint64_t component_mask[DatabaseConf::max_component_types / (sizeof(uint64_t) * 8)] = {0};
+          uint64_t component_mask[DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)] = {0};
           NEAM_EXECUTE_PACK(component_mask[id_t<AttachedObjects>::id / (sizeof(uint64_t) * 8)] |= (1ul << (id_t<AttachedObjects>::id % (sizeof(uint64_t) * 8))));
 
           // for each !
           for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
           {
             bool ok = true;
-            for (size_t j = 0; ok && j < (DatabaseConf::max_component_types / (sizeof(uint64_t) * 8)); ++j)
+            for (size_t j = 0; ok && j < (DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)); ++j)
               ok &= ((attached_object_db[attached_object_id][i]->owner->component_types[j] & component_mask[j]) == component_mask[j]);
 
             if (ok)
@@ -454,36 +458,6 @@ namespace neam
             }
           }
         }
-
-//         // faster overload for only one attached object
-//         template<typename AttachedObject, typename UnaryFunction>
-//         void for_each_list(const UnaryFunction &func, ct::type_list<>)
-//         {
-//           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
-//           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
-// 
-//           const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-//           if (attached_object_id > DatabaseConf::max_component_types)
-//             return;
-// 
-//           for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
-//             func(*static_cast<AttachedObject *>(attached_object_db[attached_object_id][i]));
-//         }
-// 
-//         // faster overload for only one attached object
-//         template<typename AttachedObject, typename UnaryFunction>
-//         void for_each_list(const UnaryFunction &func, ct::type_list<>) const
-//         {
-//           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
-//           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
-// 
-//           const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-//           if (attached_object_id > DatabaseConf::max_component_types)
-//             return;
-// 
-//           for (uint32_t i = 0; i < attached_object_db[attached_object_id].size(); ++i)
-//             func(*static_cast<const AttachedObject *>(attached_object_db[attached_object_id][i]));
-//         }
 
       private:
         template<typename AttachedObject>
@@ -608,8 +582,8 @@ namespace neam
           AttachedObject *ptr = nullptr;
           try
           {
-            // TODO(tim): replace this with a memory pool
-            ptr = new AttachedObject(&data->owner, provider...);
+            // allocate the attached object using the specified allocator
+            ptr = &DatabaseConf::attached_object_allocator::template allocate<AttachedObject>(object_type_id, &data->owner, provider...);
           }
           catch (...)
           {
@@ -617,6 +591,7 @@ namespace neam
             data->component_types[index] &= ~mask;
             data->attached_objects.erase(object_type_id);
 
+            // forward the exception
             throw;
           }
 
@@ -687,13 +662,12 @@ namespace neam
                 attached_object_db[base->object_type_id].end());
           }
 
-          // TODO(tim): replace this with a memory pool
-          delete base;
+          DatabaseConf::attached_object_allocator::deallocate(base->object_type_id, *base);
         }
 
       private:
         /// \brief The database of components / concepts / *, sorted by type_t (attached_object_type)
-        std::vector<base_t *> attached_object_db[DatabaseConf::max_component_types];
+        std::vector<base_t *> attached_object_db[DatabaseConf::max_attached_objects_types];
 
         std::vector<base_system<DatabaseConf> *> systems;
 
