@@ -35,7 +35,6 @@
 #include <array>
 #include <deque>
 #include <vector>
-#include <atomic>
 
 #include "enfield_types.hpp"
 #include "database_conf.hpp"
@@ -47,6 +46,8 @@ namespace neam
 {
   namespace enfield
   {
+    template<typename DatabaseConf> class system_manager;
+
     namespace attached_object
     {
       template<typename DBC, typename AttachedObjectClass, typename FinalClass> class base_tpl;
@@ -75,6 +76,9 @@ namespace neam
 
         struct for_each_breaker {};
 
+        database(const database&) = delete;
+        database& operator = (const database&) = delete;
+
       public:
         using conf_t = DatabaseConf;
         using entity_t = entity<DatabaseConf>;
@@ -84,6 +88,8 @@ namespace neam
         using entity_data_t = typename entity_t::data_t;
 
       public:
+        database() = default;
+
         /// \brief A query in the DB
         template<typename AttachedObject>
         class query_t
@@ -152,7 +158,6 @@ namespace neam
         ~database()
         {
           check::on_error::n_assert(entity_data_pool.get_number_of_object() == 0, "There are entities that are still alive AFTER their database has been destructed. This will lead to crashes.");
-          clear_systems();
         }
 
         /// \brief Create a new entity
@@ -178,138 +183,6 @@ namespace neam
           entity_list.push_back(data);
 
           return ret;
-        }
-
-        /// \brief Add a new system to the system list
-        template<typename System, typename... Args>
-        System &add_system(Args &&... args)
-        {
-          System *sys = new System(*this, args...);
-          systems.push_back(sys);
-          return *sys;
-        }
-
-        /// \brief Remove a system from the list
-        /// \warning This operation is quite slow
-        template<typename System>
-        void remove_system()
-        {
-          const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
-          systems.erase(std::remove_if(systems.begin(), systems.end(), [id](base_system<DatabaseConf> *sys)
-          {
-            if (sys->system_id == id)
-            {
-              delete sys;
-              return true;
-            }
-            return false;
-          }), systems.end());
-        }
-
-        /// \brief Retrieve a system from the list
-        /// \warning This operation is slow
-        template<typename System>
-        System &get_system()
-        {
-          const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
-          for (base_system<DatabaseConf> *sys : systems)
-          {
-            if (sys->system_id == id)
-              return *static_cast<System *>(sys);
-          }
-          throw exception_tpl<database>("Could not find the corresponding system", __FILE__, __LINE__);
-        }
-
-        /// \brief Retrieve a system from the list
-        /// \warning This operation is slow
-        template<typename System>
-        System &get_system() const
-        {
-          const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
-          for (const base_system<DatabaseConf> *sys : systems)
-          {
-            if (sys->system_id == id)
-              return *static_cast<const System *>(sys);
-          }
-          throw exception_tpl<database>("Could not find the corresponding system", __FILE__, __LINE__);
-        }
-
-        /// \brief Retrieve a system from the list
-        /// \warning This operation is slow
-        template<typename System>
-        bool has_system() const
-        {
-          const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
-          for (base_system<DatabaseConf> *sys : systems)
-          {
-            if (sys->system_id == id)
-              return true;
-          }
-          throw false;
-        }
-
-        /// \brief Run the systems
-        /// \note You can call this function on multiple threads at the same time
-        void run_systems()
-        {
-          enum state : int {ended = -2, init = -1};
-
-          static std::atomic<int> index = ATOMIC_VAR_INIT(ended);
-          static std::atomic<bool> is_terminating = ATOMIC_VAR_INIT(false);
-
-          // wait for the last run to finish
-          while (is_terminating.load(std::memory_order_acquire) != false);
-
-          // Init the systems for this run
-          if (index++ == ended)
-          {
-            // init the systems
-            for (base_system<DatabaseConf> *sys : systems)
-              sys->begin();
-
-            ++index; // index = 0
-          }
-          else while (index.load(std::memory_order_acquire) == init);
-
-          // Run
-          do
-          {
-            const int i = index++;
-
-            if (size_t(i) >= entity_list.size())
-            {
-              index = ended;
-              break;
-            }
-
-            entity_data_t *data = entity_list[i];
-
-            // run the entity on every system
-            for (base_system<DatabaseConf> *sys : systems)
-            {
-              if (!sys->try_run(data))
-                break;
-            }
-          } while (true);
-
-          bool res = false;
-          if (is_terminating.compare_exchange_strong(res, true))
-          {
-            // de-init the systems
-            for (base_system<DatabaseConf> *sys : systems)
-              sys->end();
-
-            index = ended;
-            is_terminating = false;
-          }
-        }
-
-        /// \brief Remove every system
-        void clear_systems()
-        {
-          for (base_system<DatabaseConf> *sys : systems)
-            delete sys;
-          systems.clear();
         }
 
         /// \brief Iterate over each attached object of a given type
@@ -669,8 +542,6 @@ namespace neam
         /// \brief The database of components / concepts / *, sorted by type_t (attached_object_type)
         std::vector<base_t *> attached_object_db[DatabaseConf::max_attached_objects_types];
 
-        std::vector<base_system<DatabaseConf> *> systems;
-
         neam::cr::memory_pool<entity_data_t> entity_data_pool;
 
         std::deque<entity_data_t *> entity_list;
@@ -681,6 +552,8 @@ namespace neam
         friend class attached_object::base_tpl;
         template<typename DBCFG, typename SystemClass> friend class system;
         friend class base_system<DatabaseConf>;
+
+        friend class system_manager<DatabaseConf>;
     };
   } // namespace enfield
 } // namespace neam

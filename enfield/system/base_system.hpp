@@ -40,7 +40,7 @@ namespace neam
 {
   namespace enfield
   {
-    template<typename DatabaseConf> class database;
+    template<typename DatabaseConf> class system_manager;
 
     /// \brief Base class for a system
     /// \note A system should not inherit from base_system, but from system instead
@@ -68,27 +68,27 @@ namespace neam
       private:
         using entity_data_t = typename entity<DatabaseConf>::data_t;
 
-        base_system(database<DatabaseConf> &_db, type_t _system_id) : db(_db), system_id(_system_id)
+        base_system(database<DatabaseConf> &_db, type_t _system_id, bool _has_barrier_before)
+          : db(_db), system_id(_system_id), has_barrier_before(_has_barrier_before)
         {
         }
         virtual ~base_system() = default;
 
         /// \brief Run if the entity has the required attached objects
-        bool try_run(entity_data_t *data)
+        void try_run(entity_data_t *data)
         {
           if (disabled)
-            return true;
+            return;
 
           bool ok = true;
           for (size_t i = 0; i < (DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)); ++i)
             ok &= ((data->component_types[i] & this->component_mask[i]) == this->component_mask[i]);
 
           if (ok)
-            return run(data);
-          return true;
+            run(data);
         }
 
-        virtual bool run(entity_data_t *data) = 0;
+        virtual void run(entity_data_t *data) = 0;
 
         template<typename AO>
         using id_t = type_id<AO, typename DatabaseConf::attached_object_type>;
@@ -102,9 +102,10 @@ namespace neam
 
         uint64_t component_mask[DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)] = {0};
         const type_t system_id;
+        const bool has_barrier_before;
 
         template<typename DBC, typename SystemClass> friend class system;
-        friend class database<DatabaseConf>;
+        friend class system_manager<DatabaseConf>;
     };
   } // namespace enfield
 } // namespace neam

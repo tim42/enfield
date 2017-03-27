@@ -59,6 +59,8 @@ namespace neam
       private:
         template<typename Type>
         using rm_rcv = typename std::remove_reference<typename std::remove_cv<Type>::type>::type;
+        struct _place_barrier_t;
+        using place_barrier_t = _place_barrier_t *;
 
       public:
         virtual std::string get_system_name() const override
@@ -67,18 +69,29 @@ namespace neam
         }
 
       protected:
+        static constexpr place_barrier_t place_barrier_before = nullptr;
+
         /// \brief constructor
-        system(database<DatabaseConf> &_db) : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id)
+        system(database<DatabaseConf> &_db)
+          : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id, false)
         {
           // setup the mask
           using list = typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list::template direct_for_each<rm_rcv>;
           this->set_mask(list());
         }
-        virtual ~system() = default;
 
-        /// \brief Tell the database to \b not pass this entity to the next system, but skip it completly
-        /// \note Only usable in SystemClass::on_entity();
-        void skip_entity() { do_skip = true; }
+        /// \brief constructor, specify that a barrier is present before this system
+        /// A system barrier does not cost anything but guaranties that every entity in the DB will have
+        /// completed the previous systems before going through this system
+        system(database<DatabaseConf> &_db, place_barrier_t)
+          : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id, true)
+        {
+          // setup the mask
+          using list = typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list::template direct_for_each<rm_rcv>;
+          this->set_mask(list());
+        }
+
+        virtual ~system() = default;
 
         /// \brief Tell the database to remove the given attached object
         /// The remove operation is queued and may effectively be done at a later stage,
@@ -100,20 +113,16 @@ namespace neam
         template<typename AO>
         using id_t = type_id<AO, typename DatabaseConf::attached_object_type>;
 
-        /// \brief Run the system on a given entity
-        /// \return false when the system asked to skip the entity
-        /// \note The system assumes that the database has checked that every required attached object are present
-        virtual bool run(entity_data_t *data) final
+        void run(entity_data_t *data) final override
         {
           using list = typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list::template direct_for_each<rm_rcv>;
 
-          return run_list(data, list());
+          run_list(data, list());
         }
 
         template<typename... AttachedObjects>
-        bool run_list(entity_data_t *data, ct::type_list<AttachedObjects...>)
+        void run_list(entity_data_t *data, ct::type_list<AttachedObjects...>)
         {
-          do_skip = false;
           entity_data = data;
 
           try
@@ -134,11 +143,9 @@ namespace neam
           }
 
           entity_data = nullptr;
-          return !do_skip;
         }
 
       private:
-        bool do_skip = false;
         entity_data_t *entity_data;
     };
   } // namespace enfield

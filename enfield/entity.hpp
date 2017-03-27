@@ -46,6 +46,7 @@ namespace neam
   {
     template<typename DatabaseConf> class database;
     template<typename DatabaseConf> class base_system;
+    template<typename DatabaseConf> class system_manager;
 
     /// \brief An entity. The entity cannot be copied, only moved. If you want to hold more than one entity,
     /// please use the memory management scheme you like the most (except reference counting, because screw ref. counts)
@@ -276,6 +277,7 @@ namespace neam
         friend class attached_object::base<DatabaseConf>;
         template<typename DBCFG, typename SystemClass> friend class system;
         friend class base_system<DatabaseConf>;
+        friend class system_manager<DatabaseConf>;
     };
   } // namespace enfield
 } // namespace neam

@@ -10,6 +10,7 @@
 
 #include <enfield/enfield.hpp>
 #include <enfield/concept/serializable.hpp>
+#include <enfield/system/system_manager.hpp>
 
 #include "conf.hpp"
 #include "auto_updatable.hpp"
@@ -37,9 +38,10 @@ int main(int, char **)
   neam::cr::out.log_level = neam::cr::stream_logger::verbosity_level::debug;
 
   neam::enfield::database<sample::db_conf> db;
+  neam::enfield::system_manager<sample::db_conf> sysmgr;
 
   // Add the auto-updatable system
-  db.add_system<sample::auto_updatable::system>();
+  sysmgr.add_system<sample::auto_updatable::system>(db);
 
   // just used to hold entities (that way they aren't destroyed)
   std::list<neam::enfield::entity<sample::db_conf>> entity_list;
@@ -56,7 +58,10 @@ int main(int, char **)
   // run the systems for quite a bit
   // NOTE: this could be multithreaded for a lower run time, but as we're quite fast, I guess that's OK
   for (size_t i = 0; i < frame_count; ++i)
-    db.run_systems();
+  {
+    sysmgr.start_new_cycle();
+    sysmgr.run_systems(db);
+  }
 
   const double dt = chr.delta();
 

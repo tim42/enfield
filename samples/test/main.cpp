@@ -10,6 +10,7 @@
 #include <enfield/enfield.hpp>
 #include <enfield/concept/serializable.hpp>
 #include <enfield/component/data_holder.hpp>
+#include <enfield/system/system_manager.hpp>
 
 using db_conf = neam::enfield::db_conf::eccs;
 
@@ -182,8 +183,9 @@ int main(int, char **)
   neam::cr::out.log_level = neam::cr::stream_logger::verbosity_level::debug;
 
   neam::enfield::database<db_conf> db;
+  neam::enfield::system_manager<db_conf> sysmgr;
 
-  db.add_system<printable_sys>();
+  sysmgr.add_system<printable_sys>(db);
 
   auto entity = db.create_entity();
 
@@ -204,7 +206,8 @@ int main(int, char **)
   entity2.add<serializable::deserialization_marker>(&entity2, &dt);
   entity2.remove<serializable::deserialization_marker>();
 
-  db.run_systems();
+  sysmgr.start_new_cycle();
+  sysmgr.run_systems(db);
 
   entity.remove<truc>();
 
