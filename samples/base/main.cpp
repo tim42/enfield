@@ -5,7 +5,7 @@
 // #define N_DISABLE_CHECKS // we don't want anything (super release)
 // #define ENFIELD_ENABLE_DEBUG_CHECKS
 
-#include <enfield/tools/logger/logger.hpp>
+#include <ntools/logger/logger.hpp>
 
 #include <enfield/enfield.hpp>
 
@@ -23,17 +23,17 @@ using db_conf = neam::enfield::db_conf::conservative_eccs;
 /// and that method can be called without argument.
 ///
 /// truc and truc2 are "printable" and thus have a print method, but both have a different signature.
-class printable : public neam::enfield::concept<db_conf, printable>
+class printable : public neam::enfield::ecs_concept<db_conf, printable>
 {
-    using concept = neam::enfield::concept<db_conf, printable>;
+    using ecs_concept = neam::enfield::ecs_concept<db_conf, printable>;
   private:
     /// \brief concept_logic is the class that defines the communication interface of the concept provider <-> the concept.
     /// It can provide functions to manipulate the concept (otherwise inaccessible to the concept provider) and let the concept
     /// make calls/retrieve data of the concept provider.
-    class concept_logic : public concept::base_concept_logic
+    class concept_logic : public ecs_concept::base_concept_logic
     {
       protected:
-        concept_logic(base_t *_base) : concept::base_concept_logic(_base) {}
+        concept_logic(base_t *_base) : ecs_concept::base_concept_logic(_base) {}
 
         virtual void _do_print() const = 0;
         friend class printable;
@@ -59,12 +59,12 @@ class printable : public neam::enfield::concept<db_conf, printable>
 
   public:
     // standard enfield constructor
-    printable(param_t p) : concept(p) {}
+    printable(param_t p) : ecs_concept(p) {}
 
     /// \brief Call print() on all printable attached objects
     void print_all() const
     {
-      neam::cr::out.log() << LOGGER_INFO << " ------ printing all ------" << std::endl;
+      neam::cr::out().log(" ------ printing all ------");
 
       // get the list of (const) references of the concept providers.
       // The returned type is: [const] concept_logic &
@@ -76,10 +76,10 @@ class printable : public neam::enfield::concept<db_conf, printable>
 //       {
 //         cp._do_print();
 //       });
-      neam::cr::out.log() << LOGGER_INFO << " ------ ------------ ------" << std::endl;
+      neam::cr::out().log(" ------ ------------ ------");
     }
 
-    friend concept;
+    friend ecs_concept;
 };
 
 /// \brief A component + a concept provider
@@ -100,7 +100,7 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private printable
     ///       all it asks is that you can do a xxx.print(); without causing a compilation error.
     void print(const std::string &hello_message = "howdy") const
     {
-      neam::cr::out.log() << LOGGER_INFO << hello_message << ": truc2" << std::endl;
+      neam::cr::out().log("{} : truc2", hello_message);
     }
 };
 
@@ -139,7 +139,7 @@ class truc : public neam::enfield::component<db_conf, truc>, private printable::
       // is NOT guaranteed to be valid (thus the get_unsafe<...>())
       get_required<truc2>().print("greetings from truc::print");
 
-      neam::cr::out.log() << LOGGER_INFO << "hello: truc" << std::endl;
+      neam::cr::out().log("hello: truc");
 
       return "truc";
     }
@@ -147,7 +147,8 @@ class truc : public neam::enfield::component<db_conf, truc>, private printable::
 
 int main(int, char **)
 {
-  neam::cr::out.log_level = neam::cr::stream_logger::verbosity_level::debug;
+  neam::cr::out.min_severity = neam::cr::logger::severity::debug;
+  neam::cr::out.register_callback(neam::cr::print_log_to_console, nullptr);
 
   // create a database using the db_conf configuration
   neam::enfield::database<db_conf> db;
@@ -158,7 +159,7 @@ int main(int, char **)
   entity.add<truc>().print();
 
   entity.get<truc2>()->print();
-  neam::cr::out.log() << LOGGER_INFO << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
+  neam::cr::out().log("has<printable>: {}", entity.has<printable>());
 
   entity.get<printable>()->print_all();
 
@@ -168,8 +169,8 @@ int main(int, char **)
   // entity.add<printable>();
   // entity.remove<printable>();
 
-  neam::cr::out.log() << LOGGER_INFO << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
-  neam::cr::out.log() << LOGGER_INFO << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
+  neam::cr::out().log("has<printable>: {}", entity.has<printable>());
+  neam::cr::out().log("has<truc2>: {}", entity.has<truc2>());
 
   entity.add<truc>();
   entity.add<truc2>();
@@ -197,10 +198,9 @@ int main(int, char **)
   // perform a query on the db: it will return every printable whose entity has either a truc or a truc2 component
   const auto query = db.query<printable>().filter<truc2, truc>(neam::enfield::query_condition::any);
 
-  neam::cr::out.log() << LOGGER_INFO << query.result.size() << std::endl;
-
-  neam::cr::out.log() << LOGGER_INFO << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
-  neam::cr::out.log() << LOGGER_INFO << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
+  neam::cr::out().log("{}", query.result.size());
+  neam::cr::out().log("has<truc2>: {}", entity.has<truc2>());
+  neam::cr::out().log("has<printable>: {}", entity.has<printable>());
 
   return 0;
 }

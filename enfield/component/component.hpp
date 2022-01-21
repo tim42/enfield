@@ -32,7 +32,6 @@
 
 #include "../base_attached_object.hpp"
 #include "../type_id.hpp"
-#include "../enfield_exception.hpp"
 
 namespace neam
 {

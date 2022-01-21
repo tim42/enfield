@@ -34,7 +34,6 @@
 #include <unordered_map>
 
 #include "enfield_types.hpp"
-#include "enfield_exception.hpp"
 
 #include "type_id.hpp"
 #include "internal_base_attached_object.hpp"
@@ -58,6 +57,56 @@ namespace neam
     {
       public:
         using database_t = database<DatabaseConf>;
+
+        struct component_mask_t
+        {
+          static constexpr size_t entry_count = (DatabaseConf::max_attached_objects_types + (sizeof(uint64_t) * 8 - 1)) / (sizeof(uint64_t) * 8);
+
+          // perform (*this & other) == *this
+          constexpr bool match(const component_mask_t& o) const
+          {
+            for (size_t j = 0; j < entry_count; ++j)
+            {
+              if ((mask[j] & o.mask[j]) != mask[j])
+                return false;
+            }
+            return true;
+          }
+
+          constexpr bool operator == (const component_mask_t& o) const
+          {
+            for (size_t j = 0; j < entry_count; ++j)
+            {
+              if (mask[j] != o.mask[j])
+                return false;
+            }
+            return true;
+          }
+
+          constexpr void set(type_t id)
+          {
+            const uint32_t index = id / ( sizeof ( uint64_t ) * 8 );
+            const uint64_t bit_mask = 1ul << ( id % ( sizeof ( uint64_t ) * 8 ) );
+            mask[index] |= bit_mask;
+          }
+
+          constexpr void unset(type_t id)
+          {
+            const uint32_t index = id / ( sizeof ( uint64_t ) * 8 );
+            const uint64_t bit_mask = 1ul << ( id % ( sizeof ( uint64_t ) * 8 ) );
+            mask[index] &= ~bit_mask;
+          }
+
+          constexpr bool is_set(type_t id) const
+          {
+            const uint32_t index = id / ( sizeof ( uint64_t ) * 8 );
+            const uint64_t bit_mask = 1ul << ( id % ( sizeof ( uint64_t ) * 8 ) );
+            return (mask[index] & bit_mask) != 0;
+          }
+
+          uint64_t mask[entry_count] = {0};
+        };
+
       private:
         using base_t = attached_object::base<DatabaseConf>;
         /// \brief The data of the entity itself isn't held by the instance of the entity, but lives in the DB
@@ -79,7 +128,7 @@ namespace neam
           database_t * const db = nullptr;
 
           /// \brief Allow a quick query of component this entity has
-          uint64_t component_types[DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)] = {0};
+          component_mask_t mask;
 
           /// \brief The list of attached_objects this entity have
           std::unordered_map<type_t, base_t *> attached_objects = std::unordered_map<type_t, base_t *>();
@@ -96,33 +145,20 @@ namespace neam
             if (this != owner->data)
               return false;
 
-            // loop over component_types
-            for (type_t i = 0; i < DatabaseConf::max_component_types; ++i)
-            {
-              const uint32_t index = i / (sizeof(uint64_t) * 8);
-              const uint64_t mask = 1ul << (i % (sizeof(uint64_t) * 8));
-              if ((!!(component_types[index] & mask)) != (!!attached_objects.count(i)))
-                return false;
-            }
+            component_mask_t actual_mask;
+            for (const auto& it : attached_objects)
+              actual_mask.set(it.first);
+
+            if (!(mask == actual_mask))
+              return false;
 
             return true;
           }
 
           /// \brief Throw an exception if the entity state is invalid
-          void throw_validate() const
+          void assert_valid() const
           {
-            check::on_error::n_assert(attached_objects.size() < DatabaseConf::max_component_types, "Entity is in invalid state");
-            check::on_error::n_assert(owner != nullptr, "Entity is in invalid state");
-            check::on_error::n_assert(this == owner->data, "Entity is in invalid state");
-
-            // loop over component_types
-            for (type_t i = 0; i < DatabaseConf::max_component_types; ++i)
-            {
-              const uint32_t index = i / (sizeof(uint64_t) * 8);
-              const uint64_t mask = 1ul << (i % (sizeof(uint64_t) * 8));
-
-              check::on_error::n_assert((!!(component_types[index] & mask)) == (!!attached_objects.count(i)), "Entity is in invalid state");
-            }
+            check::debug::n_assert(validate(), "Entity is in invalid state");
           }
         };
 
@@ -193,7 +229,7 @@ namespace neam
             AttachedObject *ret = get<AttachedObject>();
 
             base_t *bptr = ret;
-            check::on_error::n_assert(bptr->user_added == false, "The attached object is already present and has already been user-requested");
+            check::debug::n_assert(bptr->user_added == false, "The attached object is already present and has already been user-requested");
             bptr->user_added = true;
 
             return *ret;
@@ -212,7 +248,7 @@ namespace neam
 
           if (!has<AttachedObject>())
             return;
-          db->template remove_ao_user(data, data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+          db->remove_ao_user(data, data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
         }
 
         /// \brief Return an attached object.
@@ -252,9 +288,7 @@ namespace neam
           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
 
           const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-          const uint32_t index = id / (sizeof(uint64_t) * 8);
-          const uint64_t mask = 1ul << (id % (sizeof(uint64_t) * 8));
-          return (data->component_types[index] & mask) != 0;
+          return data->mask.is_set(id);
         }
 
         /// \brief Return the current database of the entity
@@ -266,7 +300,7 @@ namespace neam
         /// \note If that's not the case, it will throw something
         void validate() const
         {
-          data->throw_validate();
+          data->assert_valid();
         }
 
       private:

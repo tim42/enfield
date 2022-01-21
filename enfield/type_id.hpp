@@ -33,7 +33,6 @@
 #include <cstdint>
 
 #include "enfield_types.hpp"
-#include "enfield_exception.hpp"
 
 namespace neam
 {
@@ -48,7 +47,7 @@ namespace neam
           /// \brief Return the next id
           static type_t get_next_id()
           {
-//             check::on_error::n_assert(counter != 0, "neam::enfield::type_id<>: more than 2^32 identifiers have been generated");
+//             check::debug::n_assert(counter != 0, "neam::enfield::type_id<>: more than 2^32 identifiers have been generated");
             return ++counter;
           }
 

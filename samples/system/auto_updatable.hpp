@@ -38,14 +38,14 @@
 namespace sample
 {
   /// \brief Defines the "auto-updatable" concept + system
-  class auto_updatable : public neam::enfield::concept<db_conf, auto_updatable>
+  class auto_updatable : public neam::enfield::ecs_concept<db_conf, auto_updatable>
   {
     private:
-      using concept = neam::enfield::concept<db_conf, auto_updatable>;
-      class concept_logic : public concept::base_concept_logic
+      using ecs_concept = neam::enfield::ecs_concept<db_conf, auto_updatable>;
+      class concept_logic : public ecs_concept::base_concept_logic
       {
         protected:
-          concept_logic(base_t *_base) : concept::base_concept_logic(_base) {}
+          concept_logic(base_t *_base) : ecs_concept::base_concept_logic(_base) {}
 
           virtual void _do_update() = 0;
           friend class auto_updatable;
@@ -84,7 +84,7 @@ namespace sample
       };
 
     public:
-      auto_updatable(param_t p) : concept(p) {}
+      auto_updatable(param_t p) : ecs_concept(p) {}
 
     private:
       /// \brief Called by the system to update every auto_updatable attached objects
@@ -95,7 +95,7 @@ namespace sample
       }
 
       // Mandatory
-      friend concept;
+      friend ecs_concept;
   };
 } // namespace sample
 

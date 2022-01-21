@@ -36,7 +36,6 @@
 
 #include "../base_attached_object.hpp"
 #include "../type_id.hpp"
-#include "../enfield_exception.hpp"
 
 namespace neam
 {
@@ -55,12 +54,12 @@ namespace neam
     /// The concept_logic class defines the communication interface from the concept provider (the class that inherit from your concept_provider class) and my_concept,
     /// it should not be used to constrain the concept provider to have a specific API as your concept_provider knows the exact type of the concept provider. (use get_base_as < ConceptProvider > ())
     template<typename DatabaseConf, typename ConceptType>
-    class concept : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
+    class ecs_concept : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
     {
       public:
         using param_t = typename attached_object::base<DatabaseConf>::param_t;
 
-        virtual ~concept() = default;
+        virtual ~ecs_concept() = default;
 
       protected:
         using base_t = attached_object::base<DatabaseConf>;
@@ -71,17 +70,17 @@ namespace neam
           public:
             virtual ~base_concept_logic()
             {
-              auto it = std::remove(concept.concept_providers.begin(), concept.concept_providers.end(), this);
-              concept.concept_providers.erase(it, concept.concept_providers.end());
-              if (concept.concept_providers.empty())
-                concept.commit_suicide();
+              auto it = std::remove(ecs_concept.concept_providers.begin(), ecs_concept.concept_providers.end(), this);
+              ecs_concept.concept_providers.erase(it, ecs_concept.concept_providers.end());
+              if (ecs_concept.concept_providers.empty())
+                ecs_concept.self_destruct();
             }
 
           protected:
             base_concept_logic(base_t *_base)
-             : concept(concept::create_self(*_base)), base(_base)
+             : ecs_concept(ecs_concept::create_self(*_base)), base(_base)
             {
-              concept.concept_providers.push_back(this);
+              ecs_concept.concept_providers.push_back(this);
             }
 
           protected:
@@ -98,17 +97,17 @@ namespace neam
             const base_t &get_base() const { return *base; }
 
             /// \brief Return the concept class
-            ConceptType &get_concept() { return concept; }
+            ConceptType &get_concept() { return ecs_concept; }
             /// \brief Return the concept class
-            const ConceptType &get_concept() const { return concept; }
+            const ConceptType &get_concept() const { return ecs_concept; }
 
           private:
-            ConceptType &concept;
+            ConceptType &ecs_concept;
             base_t *base;
         };
 
       protected:
-        concept(param_t _param)
+        ecs_concept(param_t _param)
           : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
           (
             _param,

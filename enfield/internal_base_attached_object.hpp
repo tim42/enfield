@@ -30,10 +30,11 @@
 #ifndef __N_37571836813711018_1068127766_BASE_ENTITY_ATTACHED_OBJECT_HPP__
 #define __N_37571836813711018_1068127766_BASE_ENTITY_ATTACHED_OBJECT_HPP__
 
-#include "enfield_types.hpp"
-#include "enfield_exception.hpp"
-
 #include <set>
+
+#include <ntools/debug/assert.hpp>
+#include "enfield_types.hpp"
+
 
 namespace neam
 {
@@ -64,16 +65,16 @@ namespace neam
           base(entity_t **_owner, type_t _object_type_id, type_t _class_id)
             : object_type_id(_object_type_id), class_id(_class_id), owner((*_owner)->data)
           {
-            check::on_error::n_assert(object_type_id < DatabaseConf::max_attached_objects_types, "Too many attached object types for the current configuration");
+            check::debug::n_assert(object_type_id < DatabaseConf::max_attached_objects_types, "Too many attached object types for the current configuration");
           };
 
           virtual ~base()
           {
-            check::on_error::n_assert(authorized_destruction, "Trying to destroy an attached object in an unauthorized fashion");
-            check::on_error::n_assert(required_by.empty(), "Trying to destroy an attached object when other attached objects require it");
-            check::on_error::n_assert(requires.empty(), "Trying to destroy an attached object that hasn't been properly cleaned-up (still some dependency)");
-            check::on_error::n_assert(!user_added, "Trying to destroy an attached object when only the user may remove it (it has been flagged as user-added)");
-            check::on_error::n_assert(!automanaged, "Trying to destroy an attached object when only itself may remove it (via commit_suicide())");
+            check::debug::n_assert(authorized_destruction, "Trying to destroy an attached object in an unauthorized fashion");
+            check::debug::n_assert(required_by.empty(), "Trying to destroy an attached object when other attached objects require it");
+            check::debug::n_assert(requirements.empty(), "Trying to destroy an attached object that hasn't been properly cleaned-up (still some dependency)");
+            check::debug::n_assert(!user_added, "Trying to destroy an attached object when only the user may remove it (it has been flagged as user-added)");
+            check::debug::n_assert(!automanaged, "Trying to destroy an attached object when only itself may remove it (via self_destruct())");
           }
 
         public:
@@ -108,7 +109,7 @@ namespace neam
           bool user_added = false;
           bool automanaged = false;
           std::set<base *> required_by;
-          std::set<base *> requires;
+          std::set<base *> requirements;
 
           bool authorized_destruction = false;
 

@@ -5,7 +5,7 @@
 // #define N_DISABLE_CHECKS // we don't want anything
 // #define ENFIELD_ENABLE_DEBUG_CHECKS
 
-#include <enfield/tools/logger/logger.hpp>
+#include <ntools/logger/logger.hpp>
 
 #include <enfield/enfield.hpp>
 #include <enfield/concept/serializable.hpp> // we need the serializable builtin concept

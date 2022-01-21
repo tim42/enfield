@@ -37,7 +37,7 @@
 #include "../entity.hpp"
 #include "../database.hpp"
 
-#include "../tools/spinlock.hpp"
+#include <ntools/spinlock.hpp>
 
 namespace neam
 {

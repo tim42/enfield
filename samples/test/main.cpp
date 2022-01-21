@@ -5,7 +5,7 @@
 // #define N_DISABLE_CHECKS // we don't want anything
 // #define ENFIELD_ENABLE_DEBUG_CHECKS
 
-#include <enfield/tools/logger/logger.hpp>
+#include <ntools/logger/logger.hpp>
 
 #include <enfield/enfield.hpp>
 #include <enfield/concept/serializable.hpp>
@@ -17,15 +17,15 @@ using db_conf = neam::enfield::db_conf::eccs;
 using serializable = neam::enfield::concepts::serializable<db_conf, neam::cr::persistence_backend::json>;
 
 /// \brief Defines the "printable" concept
-class printable : public neam::enfield::concept<db_conf, printable>
+class printable : public neam::enfield::ecs_concept<db_conf, printable>
 {
   private:
-    using concept = neam::enfield::concept<db_conf, printable>;
+    using ecs_concept = neam::enfield::ecs_concept<db_conf, printable>;
 
-    class concept_logic : public concept::base_concept_logic
+    class concept_logic : public ecs_concept::base_concept_logic
     {
       protected:
-        concept_logic(base_t *_base) : concept::base_concept_logic(_base) {}
+        concept_logic(base_t *_base) : ecs_concept::base_concept_logic(_base) {}
 
         virtual void _do_print() const = 0;
         friend class printable;
@@ -43,12 +43,14 @@ class printable : public neam::enfield::concept<db_conf, printable>
     };
 
   public:
-    printable(param_t p) : concept(p) {}
+    printable(param_t p) : ecs_concept(p) {}
 
     void print_all() const
     {
-      neam::cr::out.log() << LOGGER_INFO << " ------ printing all ------" << std::endl;
+      neam::cr::out().log(" ------ printing all ------");
 
+      // get the list of (const) references of the concept providers.
+      // The returned type is: [const] concept_logic &
       for (size_t i = 0; i < get_concept_providers_count(); ++i)
         get_concept_provider(i)._do_print();
 
@@ -57,11 +59,11 @@ class printable : public neam::enfield::concept<db_conf, printable>
 //       {
 //         cp._do_print();
 //       });
-      neam::cr::out.log() << LOGGER_INFO << " ------ ------------ ------" << std::endl;
+      neam::cr::out().log(" ------ ------------ ------");
     }
 
     // Mandatory
-    friend concept;
+    friend ecs_concept;
 };
 
 /// \brief A system
@@ -164,7 +166,7 @@ class truc : public neam::enfield::component<db_conf, truc>,
     {
 //       get_required<truc2>().print("greetings from truc::print");
 
-      neam::cr::out.log() << LOGGER_INFO << "hello: truc" << std::endl;
+      neam::cr::out.log() << "hello: truc" << std::endl;
 
       return "truc";
     }
@@ -199,7 +201,7 @@ int main(int, char **)
   {
     dt = s.serialize();
     db.break_for_each();
-//     neam::cr::out.log() << LOGGER_INFO << (char *)dt.data << std::endl;
+//     neam::cr::out.log() << (char *)dt.data << std::endl;
   });
 
   auto entity2 = db.create_entity();

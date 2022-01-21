@@ -34,7 +34,7 @@
 
 #include "../enfield_types.hpp"
 #include "../type_id.hpp"
-#include "../tools/ct_list.hpp"
+#include <ntools/ct_list.hpp>
 
 namespace neam
 {
@@ -61,12 +61,9 @@ namespace neam
         /// after every entity has been updated
         virtual void end() = 0;
 
-        /// \brief The system can set this variable to true to go into disabled state
-        /// Disabled systems aren't run.
-        bool disabled = false;
-
       private:
         using entity_data_t = typename entity<DatabaseConf>::data_t;
+        using component_mask_t = typename entity<DatabaseConf>::component_mask_t;
 
         base_system(database<DatabaseConf> &_db, type_t _system_id, bool _has_barrier_before)
           : db(_db), system_id(_system_id), has_barrier_before(_has_barrier_before)
@@ -77,14 +74,7 @@ namespace neam
         /// \brief Run if the entity has the required attached objects
         void try_run(entity_data_t *data)
         {
-          if (disabled)
-            return;
-
-          bool ok = true;
-          for (size_t i = 0; i < (DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)); ++i)
-            ok &= ((data->component_types[i] & this->component_mask[i]) == this->component_mask[i]);
-
-          if (ok)
+          if (mask.match(data->mask))
             run(data);
         }
 
@@ -93,14 +83,27 @@ namespace neam
         template<typename AO>
         using id_t = type_id<AO, typename DatabaseConf::attached_object_type>;
 
-        /// \brief Set the component mask
         template<typename... AttachedObjects>
-        void set_mask(ct::type_list<AttachedObjects...>)
+        struct mask_helper_t
         {
-          NEAM_EXECUTE_PACK(component_mask[id_t<AttachedObjects>::id / (sizeof(uint64_t) * 8)] |= (1ul << (id_t<AttachedObjects>::id % (sizeof(uint64_t) * 8))));
+          static component_mask_t make_mask()
+          {
+            component_mask_t mask;
+            (mask.set(id_t<AttachedObjects>::id), ...);
+            return mask;
+          }
+        };
+
+        /// \brief Set the component mask
+        template<typename AttachedObjectsList>
+        void set_mask()
+        {
+          using helper = typename ct::list::extract<AttachedObjectsList>::template as<mask_helper_t>;
+          mask = helper::make_mask();
         }
 
-        uint64_t component_mask[DatabaseConf::max_attached_objects_types / (sizeof(uint64_t) * 8)] = {0};
+        component_mask_t mask;
+
         const type_t system_id;
         const bool has_barrier_before;
 

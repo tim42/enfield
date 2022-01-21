@@ -30,10 +30,9 @@
 #ifndef __N_24947127962899119538_2330222174_DATABASE_CONF_HPP__
 #define __N_24947127962899119538_2330222174_DATABASE_CONF_HPP__
 
-#include "enfield_exception.hpp"
 #include "enfield_types.hpp"
 
-#include "tools/ct_list.hpp"
+#include <ntools/ct_list.hpp>
 
 namespace neam
 {
@@ -55,7 +54,7 @@ namespace neam
       /// \brief Can another attached object destruct an attached object of that class ?
       /// \note If not in the rights, the only way to destroy an attached object of that class is either:
       ///         - by an entity destruction
-      ///         - when the attached object calls commit_suicide() on itself
+      ///         - when the attached object calls self_destruct() on itself
       /// \todo [tim] implementation of that right
       ao_removable =        1 << 3,
 
@@ -119,21 +118,6 @@ namespace neam
       delete &obj;
     }
 
-    namespace internal
-    {
-      template<typename List, type_t ClassId>
-      struct class_id
-      {
-        template<typename X>
-        struct _find
-        {
-          static constexpr bool value = (X::id == ClassId);
-        };
-
-        using type = typename List::template find_if<_find>::type;
-      };
-    }
-
     /// \brief Check that the corresponding type satisfy the database requirements
     template<typename DatabaseConf, typename AttachedObject>
     constexpr inline bool static_assert_check_attached_object()
@@ -141,9 +125,8 @@ namespace neam
       // Enfield default checks
       static_assert(std::is_base_of<neam::enfield::attached_object::base<DatabaseConf>, AttachedObject>::value, "invalid type: is not an attached object");
 
-      using class_t = typename internal::class_id<typename DatabaseConf::classes, AttachedObject::ao_class_id>::type;
-      static_assert(!std::is_same<ct::type_not_found, class_t>::value, "invalid attached object Class ID");
-      static_assert(std::is_same<class_t, typename AttachedObject::class_t>::value, "invalid attached object class");
+      using class_t = typename AttachedObject::class_t;
+      static_assert(ct::list::has_type<typename DatabaseConf::classes, class_t>, "invalid attached object Class ID");
       static_assert(std::is_base_of<neam::enfield::attached_object::base_tpl<DatabaseConf, class_t, AttachedObject>, AttachedObject>::value, "invalid attached object: does not inherit from the correct class");
 
       // Type specific checks (note: you should static_assert in that class)

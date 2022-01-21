@@ -35,9 +35,9 @@
 #include "base_system.hpp"
 
 #include "../entity.hpp"
-#include "../enfield_logger.hpp"
-#include "../tools/demangle.hpp"
-#include "../tools/function.hpp"
+#include <ntools/logger/logger.hpp>
+#include <ntools/demangle.hpp>
+#include <ntools/function.hpp>
 
 namespace neam
 {
@@ -59,8 +59,6 @@ namespace neam
       private:
         template<typename Type>
         using rm_rcv = typename std::remove_reference<typename std::remove_cv<Type>::type>::type;
-        struct _place_barrier_t;
-        using place_barrier_t = _place_barrier_t *;
 
       public:
         virtual std::string get_system_name() const override
@@ -69,26 +67,13 @@ namespace neam
         }
 
       protected:
-        static constexpr place_barrier_t place_barrier_before = nullptr;
-
         /// \brief constructor
         system(database<DatabaseConf> &_db)
           : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id, false)
         {
           // setup the mask
-          using list = typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list::template direct_for_each<rm_rcv>;
-          this->set_mask(list());
-        }
-
-        /// \brief constructor, specify that a barrier is present before this system
-        /// A system barrier does not cost anything but guaranties that every entity in the DB will have
-        /// completed the previous systems before going through this system
-        system(database<DatabaseConf> &_db, place_barrier_t)
-          : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id, true)
-        {
-          // setup the mask
-          using list = typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list::template direct_for_each<rm_rcv>;
-          this->set_mask(list());
+          using list = ct::list::for_each<typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list, rm_rcv>;
+          this->template set_mask<list>();
         }
 
         virtual ~system() = default;
@@ -113,40 +98,21 @@ namespace neam
         template<typename AO>
         using id_t = type_id<AO, typename DatabaseConf::attached_object_type>;
 
+        template<typename... AttachedObjects>
+        struct run_helper_t
+        {
+          static auto run(SystemClass* self, entity_data_t* data)
+          {
+            self->on_entity(*self->db.template entity_get<AttachedObjects>(data)...);
+          }
+        };
+
         void run(entity_data_t *data) final override
         {
-          using list = typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list::template direct_for_each<rm_rcv>;
-
-          run_list(data, list());
+          using list = ct::list::for_each<typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list, rm_rcv>;
+          using helper = typename ct::list::extract<list>::template as<run_helper_t>;
+          helper::run(static_cast<SystemClass *>(this), data);
         }
-
-        template<typename... AttachedObjects>
-        void run_list(entity_data_t *data, ct::type_list<AttachedObjects...>)
-        {
-          entity_data = data;
-
-          try
-          {
-            static_cast<SystemClass *>(this)->on_entity(*this->db.template entity_get<AttachedObjects>(data)...);
-          }
-#ifndef ENFIELD_NO_MESSAGES
-          catch (std::exception &e)
-          {
-            entity_data = nullptr;
-            ENFIELD_LOG(error, "system " << get_system_name() << ": on_entity(): exception caught: " << e.what() << std::endl);
-          }
-#endif
-          catch (...)
-          {
-            entity_data = nullptr;
-            ENFIELD_LOG(error, "system " << get_system_name() << ": on_entity(): unknown exception caught." << std::endl);
-          }
-
-          entity_data = nullptr;
-        }
-
-      private:
-        entity_data_t *entity_data;
     };
   } // namespace enfield
 } // namespace neam

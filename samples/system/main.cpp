@@ -5,11 +5,12 @@
 // #define N_DISABLE_CHECKS // we don't want anything
 // #define ENFIELD_ENABLE_DEBUG_CHECKS
 
-#include <enfield/tools/logger/logger.hpp>
-#include <enfield/tools/chrono.hpp>
+#include <list>
+#include <ntools/logger/logger.hpp>
+#include <ntools/chrono.hpp>
 
 #include <enfield/enfield.hpp>
-#include <enfield/concept/serializable.hpp>
+// #include <enfield/concept/serializable.hpp>
 #include <enfield/system/system_manager.hpp>
 
 #include "conf.hpp"
@@ -35,7 +36,8 @@ void init_entities(neam::enfield::database<sample::db_conf> &db, std::list<neam:
 
 int main(int, char **)
 {
-  neam::cr::out.log_level = neam::cr::stream_logger::verbosity_level::debug;
+  neam::cr::out.min_severity = neam::cr::logger::severity::debug;
+  neam::cr::out.register_callback(neam::cr::print_log_to_console, nullptr);
 
   neam::enfield::database<sample::db_conf> db;
   neam::enfield::system_manager<sample::db_conf> sysmgr;
@@ -46,12 +48,12 @@ int main(int, char **)
   // just used to hold entities (that way they aren't destroyed)
   std::list<neam::enfield::entity<sample::db_conf>> entity_list;
 
-  neam::cr::out.log() << LOGGER_INFO << "creating a bunch of entities [" << entity_count << "]..." << std::endl;
+  neam::cr::out().log("creating a bunch of entities [{}]...", entity_count);
 
   // create a bunch of entities
   init_entities(db, entity_list);
 
-  neam::cr::out.log() << LOGGER_INFO << "running a bit the systems [" << frame_count << " frames]..." << std::endl;
+  neam::cr::out().log("running a bit the systems [{} frames]...", frame_count);
 
   neam::cr::chrono chr;
 
@@ -65,10 +67,9 @@ int main(int, char **)
 
   const double dt = chr.delta();
 
-  neam::cr::out.log() << LOGGER_INFO << "done."
-                      "Average frame duration: " << ((dt / double(frame_count)) * 1000.) << "ms, "
-                      "time per entity: " << ((dt / double(frame_count * entity_count)) * 1000.) << "ms" << std::endl;
+    neam::cr::out().log("done: Average frame duration: {}ms, time per entity: {}ms",
+                        ((dt / double(frame_count)) * 1000.),
+                        ((dt / double(frame_count * entity_count)) * 1000.));
 
-  // die
   return 0;
 }

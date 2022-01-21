@@ -4,3 +4,9 @@
 [submodule "enfield/persistence"]
 	path = enfield/persistence
 	url = https://github.com/tim42/persistence
+[submodule "third_party/ntools"]
+	path = third_party/ntools
+	url = git@github.com:tim42/tools.git
+[submodule "third_party/fmt"]
+	path = third_party/fmt
+	url = https://github.com/fmtlib/fmt.git
