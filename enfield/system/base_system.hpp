@@ -49,6 +49,11 @@ namespace neam
     {
       public:
         virtual std::string get_system_name() const = 0;
+        base_system(database<DatabaseConf> &_db, type_t _system_id, bool _has_barrier_before)
+          : db(_db), system_id(_system_id), has_barrier_before(_has_barrier_before)
+        {
+        }
+        virtual ~base_system() = default;
 
       protected:
         database<DatabaseConf> &db;
@@ -65,11 +70,6 @@ namespace neam
         using entity_data_t = typename entity<DatabaseConf>::data_t;
         using component_mask_t = typename entity<DatabaseConf>::component_mask_t;
 
-        base_system(database<DatabaseConf> &_db, type_t _system_id, bool _has_barrier_before)
-          : db(_db), system_id(_system_id), has_barrier_before(_has_barrier_before)
-        {
-        }
-        virtual ~base_system() = default;
 
         /// \brief Run if the entity has the required attached objects
         void try_run(entity_data_t *data)

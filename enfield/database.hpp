@@ -231,15 +231,7 @@ namespace neam
         entity_t create_entity(id_t id = ~0u)
         {
           entity_data_t *data = entity_data_pool.allocate();
-          try
-          {
-            new(data) entity_data_t(id, this);  // call the constructor
-          }
-          catch (...)
-          {
-            entity_data_pool.deallocate(data);
-            throw;
-          }
+          new(data) entity_data_t(id, this);  // call the constructor
 
           entity_t ret(*this, *data);
 #ifdef ENFIELD_ENABLE_DEBUG_CHECKS

@@ -18,3 +18,10 @@ endif()
     # this is the proper way, but kdevelop does not like it
     #set(CMAKE_CXX_STANDARD 23)
 #endif()
+
+if (${CMAKE_BUILD_TYPE} STREQUAL "RelWithDebInfo")
+    if(MSVC)
+    else()
+        set(PROJECT_CXX_FLAGS ${PROJECT_CXX_FLAGS} -fno-omit-frame-pointer -rdynamic -Og)
+    endif()
+endif()

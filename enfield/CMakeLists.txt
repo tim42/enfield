@@ -1,5 +1,5 @@
 
-add_library(enfield SHARED
+add_library(enfield STATIC
     type_id.cpp
 )
 
