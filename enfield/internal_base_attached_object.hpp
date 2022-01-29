@@ -105,6 +105,7 @@ namespace neam
         private:
           /// \brief The entity that owns that attached object
           entity_data_t *owner;
+          uint64_t index = 0;
 
           bool user_added = false;
           bool automanaged = false;

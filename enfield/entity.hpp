@@ -124,6 +124,7 @@ namespace neam
           /// \brief Local id of the entity (local = not networked)
           /// This identifier is used to identify the entity in the DB
           const id_t entity_id = ~0u;
+          uint64_t index = 0;
 
           database_t * const db = nullptr;
 

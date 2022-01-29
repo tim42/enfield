@@ -239,9 +239,15 @@ namespace neam
 #endif
 
           // for systems
+          data->index = entity_list.size();
           entity_list.push_back(data);
 
           return ret;
+        }
+
+        size_t get_entity_count() const
+        {
+          return entity_list.size();
         }
 
         /// \brief Iterate over each attached object of a given type
@@ -366,6 +372,16 @@ namespace neam
           return static_cast<const AttachedObject*>(data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
         }
 
+        entity_data_t* get_entity(size_t index)
+        {
+          return entity_list[index];
+        }
+
+        const entity_data_t* get_entity(size_t index) const
+        {
+          return entity_list[index];
+        }
+
         void remove_entity(entity_data_t *data)
         {
 #ifdef ENFIELD_ENABLE_DEBUG_CHECKS
@@ -383,8 +399,10 @@ namespace neam
             remove_ao_user(data, it);
 
           // remove the entity from the list
-          // TODO(tim): use a smart cache and avoid that costly removal
-          entity_list.erase(std::remove(entity_list.begin(), entity_list.end(), data), entity_list.end());
+          check::debug::n_assert(entity_list[data->index] == data, "Trying to remove and entity from a different DB");
+          entity_list.back()->index = data->index;
+          entity_list[data->index] = entity_list.back();
+          entity_list.pop_back();
 
           // This error mostly tells you that you have dependency cycles in your attached objects.
           // You can put a breakpoint here and look at what is inside the attached_objects vector.
@@ -465,7 +483,10 @@ namespace neam
           // something that would trigger a static_assert when used.
           // The condition is constexpr, so there's not conditional statement in the generated code.
           if (dbconf_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>())
+          {
+            ptr->index = attached_object_db[object_type_id].size();
             attached_object_db[object_type_id].push_back(ptr);
+          }
 
           return *ptr;
         }
@@ -519,8 +540,10 @@ namespace neam
           // may does not know the type of the element to remove, so it cannot perform compile-time branching.
           if (!attached_object_db[base->object_type_id].empty())
           {
-            attached_object_db[base->object_type_id].erase(std::remove(attached_object_db[base->object_type_id].begin(), attached_object_db[base->object_type_id].end(), base),
-                attached_object_db[base->object_type_id].end());
+            check::debug::n_assert(attached_object_db[base->object_type_id][base->index] == base, "Trying to remove and entity from a different DB");
+            attached_object_db[base->object_type_id].back()->index = base->index;
+            attached_object_db[base->object_type_id][base->index] = attached_object_db[base->object_type_id].back();
+            attached_object_db[base->object_type_id].pop_back();
           }
 
           DatabaseConf::attached_object_allocator::deallocate(base->object_type_id, *base);
@@ -528,7 +551,7 @@ namespace neam
 
       private:
         /// \brief The database of components / concepts / *, sorted by type_t (attached_object_type)
-        std::vector<base_t *> attached_object_db[DatabaseConf::max_attached_objects_types];
+        std::deque<base_t *> attached_object_db[DatabaseConf::max_attached_objects_types];
 
         neam::cr::memory_pool<entity_data_t> entity_data_pool;
 
