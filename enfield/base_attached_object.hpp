@@ -43,18 +43,15 @@ namespace neam
       class base_tpl : public base<DatabaseConf>
       {
         private:
-          using entity_t = typename attached_object::base<DatabaseConf>::entity_t;
-          using database_t = typename attached_object::base<DatabaseConf>::database_t;
-          using base_t = attached_object::base<DatabaseConf>;
+          using base_t = base<DatabaseConf>;
 
         public:
+          using param_t = typename base_t::param_t;
           using class_t = AttachedObjectClass;
           static constexpr type_t ao_class_id = AttachedObjectClass::id;
 
-          using param_t = entity_t **;
-
         protected:
-          base_tpl(entity_t **_owner, type_t _object_type_id) : base<DatabaseConf>(_owner, _object_type_id, AttachedObjectClass::id)
+          base_tpl(param_t _p, type_t _object_type_id) : base<DatabaseConf>(_p, _object_type_id, AttachedObjectClass::id)
           {
             // Here, as when triggered the whole class has been generated
             static_assert_check_attached_object<DatabaseConf, FinalClass>();
@@ -65,7 +62,7 @@ namespace neam
           /// \brief Return the entity id
           id_t get_entity_id() const
           {
-            return this->owner->entity_id;
+            return this->owner.entity_id;
           }
 
           /// \brief Require another (requireable) attached object
@@ -74,12 +71,12 @@ namespace neam
           ///       as the returned object will not be fully constructed (in case of circular dependencies).
           ///
           /// Required attached objects will be destructed after the last attached object requiring them has been destructed.
-          template<typename AttachedObject, typename DataProvider>
-          AttachedObject &require(DataProvider *provider)
+          template<typename AttachedObject, typename... DataProvider>
+          AttachedObject& require(DataProvider&&... provider)
           {
             static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_requireable>();
 
-            return this->owner->db->template add_ao_dep<AttachedObject>(this->owner, this, provider);
+            return this->owner.db.template add_ao_dep<AttachedObject>(this->owner, *this, std::forward<DataProvider>(provider)...);
           }
 
           template<typename AttachedObject>
@@ -87,53 +84,37 @@ namespace neam
           {
             static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_requireable>();
 
-            AttachedObject *ret = entity_get<AttachedObject>();
-            base_t *bptr = ret;
+            AttachedObject* ret = entity_get<AttachedObject>();
+            base_t* bptr = ret;
             if (bptr)
             {
-              this->owner->db->remove_ao_dep(bptr, this->owner, this);
-              this->requirements.erase(bptr);
+              this->owner.db.remove_ao_dep(*bptr, this->owner, *this);
             }
           }
 
-          /// \brief Require another (requireable) attached object
-          /// \note circular dependencies will not be tested when calling that function but will trigger an exception when
-          ///       trying to destruct the entity. Also, circular dependencies may lead to segfaults/memory corruption
-          ///       as the returned object will not be fully constructed (in case of circular dependencies).
-          ///
-          /// Required attached objects will be destructed after the last attached object requiring them has been destructed.
-          template<typename AttachedObject>
-          AttachedObject &require()
-          {
-            static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_requireable>();
-
-            return this->owner->db->template add_ao_dep<AttachedObject>(this->owner, this);
-          }
-
-
           /// \brief Return a required attached object. If the object to be returned
-          /// either does not exists or has not been required then that function will throw.
+          /// either does not exists or has not been required then that function will assert.
           template<typename AttachedObject>
-          AttachedObject &get_required()
+          AttachedObject& get_required()
           {
             static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_requireable>();
 
-            AttachedObject *ret = entity_get<AttachedObject>();
+            AttachedObject* ret = entity_get<AttachedObject>();
             check::debug::n_assert(ret != nullptr, "The attached object required does not exists");
-            base_t *bptr = ret;
+            base_t* bptr = ret;
             check::debug::n_assert(this->requirements.count(bptr), "The attached object to be returned has not been required");
 
             return *ret;
           }
 
           template<typename AttachedObject>
-          const AttachedObject &get_required() const
+          const AttachedObject& get_required() const
           {
             static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_requireable>();
 
-            const AttachedObject *ret = entity_get<AttachedObject>();
+            const AttachedObject* ret = entity_get<AttachedObject>();
             check::debug::n_assert(ret != nullptr, "The attached object required does not exists");
-            const base_t *bptr = ret;
+            const base_t* bptr = ret;
             check::debug::n_assert(this->requirements.count(const_cast<base_t*>(bptr)), "The attached object to be returned has not been required");
 
             return *ret;
@@ -144,7 +125,7 @@ namespace neam
           /// another thread may remove the returned object at any time. (except if the returned object is one of the required objects)
           /// \note some kind of attached objects (like concepts) can only be retrieved by get_unsafe() as they can't be required.
           template<typename AttachedObject>
-          AttachedObject *get_unsafe()
+          AttachedObject* get_unsafe()
           {
             static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_unsafe_getable>();
 
@@ -152,7 +133,7 @@ namespace neam
           }
 
           template<typename AttachedObject>
-          const AttachedObject *get_unsafe() const
+          const AttachedObject* get_unsafe() const
           {
             static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_unsafe_getable>();
 
@@ -161,25 +142,25 @@ namespace neam
 
           /// \brief Create an automanaged instance.
           /// \note The only way to destroy such a object is with self_destruct()
-          /// \warning Failing to call self_destruct() will result in an exception being thrown when destructing the entity
+          /// \warning Failing to call self_destruct() will result in an assert being triggered when destructing the entity
           /// \param base An attached object that will be used to retrieve the entity on which to create the new attached object.
           template<typename... DataProvider>
-          static FinalClass &create_self(base_t &base, DataProvider *... provider)
+          static FinalClass& create_self(base_t& base, DataProvider&& ... provider)
           {
             static_assert_can<DatabaseConf, ao_class_id, attached_object_access::automanaged>();
 
             {
               // check for existance:
               const type_t id = type_id<FinalClass, typename DatabaseConf::attached_object_type>::id;
-              if (base.owner->mask.is_set(id))
+              if (base.owner.mask.is_set(id))
               {
-                FinalClass *ptr = static_cast<FinalClass*>(base.owner->attached_objects[type_id<FinalClass, typename DatabaseConf::attached_object_type>::id]);
+                FinalClass* ptr = static_cast<FinalClass*>(base.owner.attached_objects[type_id<FinalClass, typename DatabaseConf::attached_object_type>::id]);
                 if (ptr)
                 {
                   // already existing: check to see if it's an automanaged object
-                  FinalClass &ret = *ptr;
-                  base_t *bptr = &ret;
-                  check::debug::n_assert(bptr != (base_t *)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
+                  FinalClass& ret = *ptr;
+                  base_t* bptr = &ret;
+                  check::debug::n_assert(bptr != (base_t*)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
                   check::debug::n_assert(bptr->automanaged == true, "create_self() called on an entity which already have an attached object of that type but that isn't automanaged");
                   return ret;
                 }
@@ -187,9 +168,9 @@ namespace neam
             }
 
             // create it
-            FinalClass &ret = base.owner->db->template _create_ao<FinalClass>(base.owner, provider...);
-            base_t *bptr = &ret;
-            check::debug::n_assert(bptr != (base_t *)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
+            FinalClass& ret = base.owner.db.template _create_ao<FinalClass>(base.owner, std::forward<DataProvider>(provider)...);
+            base_t* bptr = &ret;
+            check::debug::n_assert(bptr != (base_t*)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
             bptr->automanaged = true;
 
             return ret;
@@ -206,27 +187,27 @@ namespace neam
 
             this->automanaged = false;
             this->user_added = true;
-            this->owner->db->remove_ao_user(this->owner, this);
+            this->owner.db.remove_ao_user(this->owner, *this);
           }
 
         private:
           template<typename AttachedObject>
-          AttachedObject *entity_get()
+          AttachedObject* entity_get()
           {
             if (!entity_has<AttachedObject>())
               return nullptr;
-            AttachedObject *ret = static_cast<AttachedObject*>(this->owner->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
-            check::debug::n_assert(static_cast<base_t *>(ret) != (base_t *)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
+            AttachedObject* ret = static_cast<AttachedObject*>(this->owner.attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+            check::debug::n_assert(static_cast<base_t*>(ret) != (base_t*)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
             return ret;
           }
 
           template<typename AttachedObject>
-          const AttachedObject *entity_get() const
+          const AttachedObject* entity_get() const
           {
             if (!entity_has<AttachedObject>())
               return nullptr;
-            const AttachedObject *ret = static_cast<const AttachedObject*>(this->owner->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
-            check::debug::n_assert(static_cast<const base_t *>(ret) != (base_t *)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
+            const AttachedObject* ret = static_cast<const AttachedObject*>(this->owner.attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+            check::debug::n_assert(static_cast<const base_t*>(ret) != (base_t*)(poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
             return ret;
           }
 
@@ -234,7 +215,7 @@ namespace neam
           bool entity_has() const
           {
             const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-            return this->owner->mask.is_set(id);
+            return this->owner.mask.is_set(id);
           }
 
         private:

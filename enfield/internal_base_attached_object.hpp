@@ -53,23 +53,25 @@ namespace neam
       template<typename DatabaseConf>
       class base
       {
-        private:
-          using entity_t = entity<DatabaseConf>;
+        public:
           using entity_data_t = typename entity<DatabaseConf>::data_t;
           using database_t = database<DatabaseConf>;
+          using base_t = base<DatabaseConf>;
 
         public:
-          using param_t = entity_t **;
+          using param_t = entity_data_t&;
 
         private:
-          base(entity_t **_owner, type_t _object_type_id, type_t _class_id)
-            : object_type_id(_object_type_id), class_id(_class_id), owner((*_owner)->data)
+          base(param_t& _owner, type_t _object_type_id, type_t _class_id)
+            : object_type_id(_object_type_id), class_id(_class_id), owner(_owner)
           {
             check::debug::n_assert(object_type_id < DatabaseConf::max_attached_objects_types, "Too many attached object types for the current configuration");
           };
 
           virtual ~base()
           {
+            owner.db.cleanup_ao_dependencies(*this, owner);
+
             check::debug::n_assert(authorized_destruction, "Trying to destroy an attached object in an unauthorized fashion");
             check::debug::n_assert(required_by.empty(), "Trying to destroy an attached object when other attached objects require it");
             check::debug::n_assert(requirements.empty(), "Trying to destroy an attached object that hasn't been properly cleaned-up (still some dependency)");
@@ -104,13 +106,13 @@ namespace neam
 
         private:
           /// \brief The entity that owns that attached object
-          entity_data_t *owner;
+          entity_data_t& owner;
           uint64_t index = 0;
 
           bool user_added = false;
           bool automanaged = false;
-          std::set<base *> required_by;
-          std::set<base *> requirements;
+          std::set<base*> required_by;
+          std::set<base*> requirements;
 
           bool authorized_destruction = false;
 
@@ -119,7 +121,7 @@ namespace neam
 
           // allow the deallocator to call the destructor
           template<typename DBC>
-          friend void DatabaseConf::attached_object_allocator::deallocate(type_t, base<DBC> &) noexcept;
+          friend void DatabaseConf::attached_object_allocator::deallocate(type_t, base<DBC>&);
 
           template<typename DBC, typename AttachedObjectClass, typename FC>
           friend class base_tpl;

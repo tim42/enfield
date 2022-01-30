@@ -77,8 +77,8 @@ namespace neam
             }
 
           protected:
-            base_concept_logic(base_t *_base)
-             : ecs_concept(ecs_concept::create_self(*_base)), base(_base)
+            base_concept_logic(base_t& _base)
+              : ecs_concept(ecs_concept::create_self(_base)), base(_base)
             {
               ecs_concept.concept_providers.push_back(this);
             }
@@ -86,33 +86,33 @@ namespace neam
           protected:
             /// \brief Return the base as a specific type (via static_cast)
             template<typename FinalClass>
-            FinalClass &get_base_as() { return *static_cast<FinalClass *>(base); }
+            FinalClass& get_base_as() { return static_cast<FinalClass&>(base); }
             /// \brief Return the base as a specific type (via static_cast)
             template<typename FinalClass>
-            const FinalClass &get_base_as() const { return *static_cast<const FinalClass *>(base); }
+            const FinalClass& get_base_as() const { return static_cast<const FinalClass&>(base); }
 
             /// \brief Return the base
-            base_t &get_base() { return *base; }
+            base_t& get_base() { return base; }
             /// \brief Return the base
-            const base_t &get_base() const { return *base; }
+            const base_t& get_base() const { return base; }
 
             /// \brief Return the concept class
-            ConceptType &get_concept() { return ecs_concept; }
+            ConceptType& get_concept() { return ecs_concept; }
             /// \brief Return the concept class
-            const ConceptType &get_concept() const { return ecs_concept; }
+            const ConceptType& get_concept() const { return ecs_concept; }
 
           private:
-            ConceptType &ecs_concept;
-            base_t *base;
+            ConceptType& ecs_concept;
+            base_t& base;
         };
 
       protected:
         ecs_concept(param_t _param)
           : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
-          (
-            _param,
-            type_id<ConceptType, typename DatabaseConf::attached_object_type>::id
-          )
+            (
+              _param,
+              type_id<ConceptType, typename DatabaseConf::attached_object_type>::id
+            )
         {
           // checks: (can't be in the class body, as the whole base_concept & ConceptType types have to be defined.
 
@@ -124,16 +124,16 @@ namespace neam
         }
 
         template<typename UnaryFunction>
-        void for_each_concept_provider(const UnaryFunction &func)
+        void for_each_concept_provider(const UnaryFunction& func)
         {
-          for (base_concept_logic *it : concept_providers)
-            func(*static_cast<typename ConceptType::concept_logic *>(it));
+          for (base_concept_logic* it : concept_providers)
+            func(*static_cast<typename ConceptType::concept_logic*>(it));
         }
         template<typename UnaryFunction>
-        void for_each_concept_provider(const UnaryFunction &func) const
+        void for_each_concept_provider(const UnaryFunction& func) const
         {
-          for (const base_concept_logic *it : concept_providers)
-            func(*static_cast<const typename ConceptType::concept_logic *>(it));
+          for (const base_concept_logic* it : concept_providers)
+            func(*static_cast<const typename ConceptType::concept_logic*>(it));
         }
 
         size_t get_concept_providers_count() const
@@ -141,26 +141,26 @@ namespace neam
           return concept_providers.size();
         }
 
-        auto get_concept_provider(size_t i) -> auto &
+        auto get_concept_provider(size_t i) -> auto&
         {
-          return *static_cast<typename ConceptType::concept_logic *>(concept_providers[i]);
+          return *static_cast<typename ConceptType::concept_logic*>(concept_providers[i]);
         }
-        auto get_concept_provider(size_t i) const -> const auto &
+        auto get_concept_provider(size_t i) const -> const auto&
         {
-          return *static_cast<const typename ConceptType::concept_logic *>(concept_providers[i]);
+          return *static_cast<const typename ConceptType::concept_logic*>(concept_providers[i]);
         }
 
         auto _get_concept_providers() -> auto
         {
-          return reinterpret_cast<typename ConceptType::concept_logic **>(concept_providers.data());
+          return reinterpret_cast<typename ConceptType::concept_logic**>(concept_providers.data());
         }
         auto _get_concept_providers() const -> auto
         {
-          return reinterpret_cast<const typename ConceptType::concept_logic *const*>(concept_providers.data());
+          return reinterpret_cast<const typename ConceptType::concept_logic* const*>(concept_providers.data());
         }
 
       private:
-        std::vector<base_concept_logic *> concept_providers;
+        std::vector<base_concept_logic*> concept_providers;
     };
   } // namespace enfield
 } // namespace neam

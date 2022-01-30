@@ -85,9 +85,9 @@ namespace neam
     };
     inline constexpr attached_object_access operator | (attached_object_access a, attached_object_access b) { return static_cast<attached_object_access>((int)a | (int)b); }
     inline constexpr attached_object_access operator & (attached_object_access a, attached_object_access b) { return static_cast<attached_object_access>((int)a & (int)b); }
-    inline constexpr attached_object_access operator ~ (attached_object_access a) { return static_cast<attached_object_access>(~(int)a); }
-    inline /*constexpr*/ attached_object_access &operator |= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a | (int)b); return a; }
-    inline /*constexpr*/ attached_object_access &operator &= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a & (int)b); return a; }
+    inline constexpr attached_object_access operator ~(attached_object_access a) { return static_cast<attached_object_access>(~(int)a); }
+    inline /*constexpr*/ attached_object_access& operator |= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a | (int)b); return a; }
+    inline /*constexpr*/ attached_object_access& operator &= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a & (int)b); return a; }
 
     /// \brief The default enfield allocator for attached objects (simply new/delete)
     /// All allocators should respect the same conditions:
@@ -99,21 +99,21 @@ namespace neam
     {
       /// \brief Allocate a new object, and call its constructor.
       template<typename Object, typename... Args>
-      static Object &allocate(type_t type_id, Args &&... args);
+      static Object& allocate(type_t type_id, Args&& ... args);
 
       /// \brief Destruct and deallocate the object
       template<typename DatabaseConf>
-      static void deallocate(type_t type_id, attached_object::base<DatabaseConf> &obj) noexcept;
+      static void deallocate(type_t type_id, attached_object::base<DatabaseConf>& obj);
     };
 
     template<typename Object, typename... Args>
-    Object &default_attached_object_allocator::allocate(type_t, Args &&... args)
+    Object& default_attached_object_allocator::allocate(type_t, Args&& ... args)
     {
       return *new Object(std::forward<Args>(args)...);
     }
 
     template<typename DatabaseConf>
-    void default_attached_object_allocator::deallocate(type_t, attached_object::base<DatabaseConf> &obj) noexcept
+    void default_attached_object_allocator::deallocate(type_t, attached_object::base<DatabaseConf>& obj)
     {
       delete &obj;
     }
@@ -188,30 +188,30 @@ namespace neam
 
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, attached_object_access Operation>
-    inline void throw_can()
+    inline void assert_can()
     {
       if (!dbconf_can<DatabaseConf, AttachedObjectClass, Operation>())
-        throw exception_tpl<DatabaseConf>("Operation not permitted", __FILE__, __LINE__);
+        check::debug::n_assert(false, "Operation not permitted");
     }
     template<typename DatabaseConf, typename AttachedObjectClass, attached_object_access Operation>
-    inline void throw_can()
+    inline void assert_can()
     {
       if (!dbconf_can<DatabaseConf, AttachedObjectClass, Operation>())
-        throw exception_tpl<DatabaseConf>("Operation not permitted", __FILE__, __LINE__);
+        check::debug::n_assert(false, "Operation not permitted");
     }
 
     /// \brief Check that an operation is possible on a given AttachedObject
     template<typename DatabaseConf, type_t AttachedObjectClass, type_t OtherAttachedObjectClass, attached_object_access Operation>
-    inline void throw_can()
+    inline void assert_can()
     {
       if (!dbconf_can<DatabaseConf, AttachedObjectClass, OtherAttachedObjectClass, Operation>())
-        throw exception_tpl<DatabaseConf>("Operation not permitted in the current context", __FILE__, __LINE__);
+        check::debug::n_assert(false, "Operation not permitted");
     }
     template<typename DatabaseConf, typename AttachedObjectClass, typename OtherAttachedObjectClass, attached_object_access Operation>
-    inline void throw_can()
+    inline void assert_can()
     {
       if (!dbconf_can<DatabaseConf, AttachedObjectClass, OtherAttachedObjectClass, Operation>())
-        throw exception_tpl<DatabaseConf>("Operation not permitted in the current context", __FILE__, __LINE__);
+        check::debug::n_assert(false, "Operation not permitted");
     }
   } // namespace enfield
 } // namespace neam

@@ -53,14 +53,14 @@ namespace neam
         public:
           data_holder(typename component::param_t p)
             : component(p),
-              ConceptProviders<data_holder<DatabaseConf, Data, ConceptProviders...>>(this)...
+              ConceptProviders<data_holder<DatabaseConf, Data, ConceptProviders...>>(*this)...
           {
           }
 
           /// \brief If you specify a data_t* (or Data*) argument to the constructor, it will be used to initialize the data member
           data_holder(typename component::param_t p, Data *data_ptr)
             : component(p),
-              ConceptProviders<data_holder<DatabaseConf, Data, ConceptProviders...>>(this)...,
+              ConceptProviders<data_holder<DatabaseConf, Data, ConceptProviders...>>(*this)...,
               data(*data_ptr)
           {
           }
@@ -68,32 +68,26 @@ namespace neam
           using data_t = Data;
           data_t data;
 
-        private: // serializable
-          data_holder(typename component::param_t p, concepts::from_deserialization_t)
-            : component(p),
-              ConceptProviders<data_holder<DatabaseConf, Data, ConceptProviders...>>(this)...,
-              data(this->get_persistent_data())
-          {
-            // perform the unserialization of name. The compilation won't fail as the template is lazilly evaluated
-            // and this constructor, being private and thus never called should not be evaluated by the compiler.
-          }
-
-          const data_t &get_data_to_serialize() const
-          {
-            return data;
-          }
-
-          void refresh_from_deserialization()
-          {
-            data = this->get_persistent_data();
-          }
-
-          template<typename DBC, typename THING> friend class concepts::serializable;
+          friend class concepts::serializable<DatabaseConf>;
           friend typename DatabaseConf::attached_object_allocator; // allow the allocator to call the private constructor
       };
     } // namespace components
   } // namespace enfield
 } // namespace neam
 
+// Handle automatic serialization.
+// Because the class is a template class, the metadata is a bit more... Invasive.
+template<typename DatabaseConf, typename Data, template<typename X> class... ConceptProviders>
+N_METADATA_STRUCT_TPL(neam::enfield::components::data_holder, DatabaseConf, Data, ConceptProviders...)
+{
+  N_DECLARE_STRUCT_TYPE_TPL(neam::enfield::components::data_holder, DatabaseConf, Data, ConceptProviders...);
+
+  using member_list = neam::ct::type_list
+  <
+    N_MEMBER_DEF(data)
+  >;
+};
+
 #endif // __N_12776153593207818043_2352923957_DATA_HOLDER_HPP__
+
 

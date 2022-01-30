@@ -59,43 +59,43 @@ namespace neam
       /// This is the default DB configuration.
       struct eccs
       {
-        // type markers (mandatory)
-        struct attached_object_class;
-        struct attached_object_type;
-        struct system_type;
+          // type markers (mandatory)
+          struct attached_object_class;
+          struct attached_object_type;
+          struct system_type;
 
-        // allowed attached object classes (the constexpr type_t id is mandatory):
-        struct component_class { static constexpr type_t id = 0; };
-        struct concept_class { static constexpr type_t id = 1; };
+          // allowed attached object classes (the constexpr type_t id is mandatory):
+          struct component_class { static constexpr type_t id = 0; };
+          struct concept_class { static constexpr type_t id = 1; };
 
-        // the list of classes
-        using classes = ct::type_list<component_class, concept_class>;
+          // the list of classes
+          using classes = ct::type_list<component_class, concept_class>;
 
-        // "rights" configuration:
-        template<type_t ClassId>
-        struct class_rights
-        {
-          // default configuration: (must be static constexpr)
+          // "rights" configuration:
+          template<type_t ClassId>
+          struct class_rights
+          {
+            // default configuration: (must be static constexpr)
 
-          /// \brief Define general access rights
-          static constexpr attached_object_access access = attached_object_access::all;
-        };
+            /// \brief Define general access rights
+            static constexpr attached_object_access access = attached_object_access::all;
+          };
 
-        /// \brief Specify the rights of OtherClassId over ClassId.
-        /// In this mode, only attached_object_access::ao_* are accounted
-        /// the default is to use the class_rights.
-        template<type_t ClassId, type_t OtherClassId>
-        struct specific_class_rights : public class_rights<ClassId> {};
+          /// \brief Specify the rights of OtherClassId over ClassId.
+          /// In this mode, only attached_object_access::ao_* are accounted
+          /// the default is to use the class_rights.
+          template<type_t ClassId, type_t OtherClassId>
+          struct specific_class_rights : public class_rights<ClassId> {};
 
-        /// \brief In that mode, the default enfield checks are OK
-        template<type_t ClassId, typename AttachedObject>
-        struct check_attached_object : no_check<true> {};
+          /// \brief In that mode, the default enfield checks are OK
+          template<type_t ClassId, typename AttachedObject>
+          struct check_attached_object : no_check<true> {};
 
-        /// \brief The attached object allocator
-        using attached_object_allocator = default_attached_object_allocator;
+          /// \brief The attached object allocator
+          using attached_object_allocator = default_attached_object_allocator;
 
-        /// \brief The maximum number of components
-        static constexpr uint64_t max_attached_objects_types = 2 * 64;
+          /// \brief The maximum number of components
+          static constexpr uint64_t max_attached_objects_types = 2 * 64;
       };
       template<>
       struct eccs::class_rights<eccs::concept_class::id>
@@ -112,43 +112,43 @@ namespace neam
       /// In that configuration, concepts cannot require components
       struct conservative_eccs
       {
-        // type markers (mandatory)
-        struct attached_object_class;
-        struct attached_object_type;
-        struct system_type;
+          // type markers (mandatory)
+          struct attached_object_class;
+          struct attached_object_type;
+          struct system_type;
 
-        // allowed attached object classes (the constexpr type_t id is mandatory):
-        struct component_class { static constexpr type_t id = 0; };
-        struct concept_class { static constexpr type_t id = 1; };
+          // allowed attached object classes (the constexpr type_t id is mandatory):
+          struct component_class { static constexpr type_t id = 0; };
+          struct concept_class { static constexpr type_t id = 1; };
 
-        // the list of classes
-        using classes = ct::type_list<component_class, concept_class>;
+          // the list of classes
+          using classes = ct::type_list<component_class, concept_class>;
 
-        // "rights" configuration:
-        template<type_t ClassId>
-        struct class_rights
-        {
-          // default configuration: (must be static constexpr)
+          // "rights" configuration:
+          template<type_t ClassId>
+          struct class_rights
+          {
+            // default configuration: (must be static constexpr)
 
-          /// \brief Define general access rights
-          static constexpr attached_object_access access = attached_object_access::all;
-        };
+            /// \brief Define general access rights
+            static constexpr attached_object_access access = attached_object_access::all;
+          };
 
-        /// \brief Specify the rights of OtherClassId over ClassId.
-        /// In this mode, only attached_object_access::ao_* are accounted
-        /// the default is to use the class_rights.
-        template<type_t ClassId, type_t OtherClassId>
-        struct specific_class_rights : public class_rights<ClassId> {};
+          /// \brief Specify the rights of OtherClassId over ClassId.
+          /// In this mode, only attached_object_access::ao_* are accounted
+          /// the default is to use the class_rights.
+          template<type_t ClassId, type_t OtherClassId>
+          struct specific_class_rights : public class_rights<ClassId> {};
 
-        /// \brief In that mode, the default enfield checks are OK
-        template<type_t ClassId, typename AttachedObject>
-        struct check_attached_object : no_check<true> {};
+          /// \brief In that mode, the default enfield checks are OK
+          template<type_t ClassId, typename AttachedObject>
+          struct check_attached_object : no_check<true> {};
 
-        /// \brief The attached object allocator
-        using attached_object_allocator = default_attached_object_allocator;
+          /// \brief The attached object allocator
+          using attached_object_allocator = default_attached_object_allocator;
 
-        /// \brief The maximum number of components
-        static constexpr uint64_t max_attached_objects_types = 2 * 64;
+          /// \brief The maximum number of components
+          static constexpr uint64_t max_attached_objects_types = 2 * 64;
       };
       template<>
       struct conservative_eccs::class_rights<conservative_eccs::concept_class::id>
@@ -168,42 +168,42 @@ namespace neam
       /// \brief A plain dull ECS configuration
       struct ecs
       {
-        // type markers (mandatory)
-        struct attached_object_class;
-        struct attached_object_type;
-        struct system_type;
+          // type markers (mandatory)
+          struct attached_object_class;
+          struct attached_object_type;
+          struct system_type;
 
-        // allowed attached object classes (the constexpr type_t id is mandatory):
-        struct component_class { static constexpr type_t id = 0; };
+          // allowed attached object classes (the constexpr type_t id is mandatory):
+          struct component_class { static constexpr type_t id = 0; };
 
-        // the list of classes
-        using classes = ct::type_list<component_class>;
+          // the list of classes
+          using classes = ct::type_list<component_class>;
 
-        // "rights" configuration:
-        template<type_t ClassId>
-        struct class_rights
-        {
-          // default configuration: (must be static constexpr)
+          // "rights" configuration:
+          template<type_t ClassId>
+          struct class_rights
+          {
+            // default configuration: (must be static constexpr)
 
-          /// \brief Define general access rights
-          static constexpr attached_object_access access = attached_object_access::all;
-        };
+            /// \brief Define general access rights
+            static constexpr attached_object_access access = attached_object_access::all;
+          };
 
-        /// \brief Specify the rights of OtherClassId over ClassId.
-        /// In this mode, only attached_object_access::ao_* are accounted
-        /// the default is to use the class_rights.
-        template<type_t ClassId, type_t OtherClassId>
-        struct specific_class_rights : public class_rights<ClassId> {};
+          /// \brief Specify the rights of OtherClassId over ClassId.
+          /// In this mode, only attached_object_access::ao_* are accounted
+          /// the default is to use the class_rights.
+          template<type_t ClassId, type_t OtherClassId>
+          struct specific_class_rights : public class_rights<ClassId> {};
 
-        /// \brief In that mode, the default enfield checks are OK
-        template<type_t ClassId, typename AttachedObject>
-        struct check_attached_object : no_check<true> {};
+          /// \brief In that mode, the default enfield checks are OK
+          template<type_t ClassId, typename AttachedObject>
+          struct check_attached_object : no_check<true> {};
 
-        /// \brief The attached object allocator
-        using attached_object_allocator = default_attached_object_allocator;
+          /// \brief The attached object allocator
+          using attached_object_allocator = default_attached_object_allocator;
 
-        /// \brief The maximum number of components
-        static constexpr uint64_t max_attached_objects_types = 2 * 64;
+          /// \brief The maximum number of components
+          static constexpr uint64_t max_attached_objects_types = 2 * 64;
       };
     } // namespace db_conf
   } // namespace enfield

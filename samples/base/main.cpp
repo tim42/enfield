@@ -33,7 +33,7 @@ class printable : public neam::enfield::ecs_concept<db_conf, printable>
     class concept_logic : public ecs_concept::base_concept_logic
     {
       protected:
-        concept_logic(base_t *_base) : ecs_concept::base_concept_logic(_base) {}
+        concept_logic(base_t& _base) : ecs_concept::base_concept_logic(_base) {}
 
         virtual void _do_print() const = 0;
         friend class printable;
@@ -46,7 +46,9 @@ class printable : public neam::enfield::ecs_concept<db_conf, printable>
     class concept_provider : public concept_logic
     {
       public:
-        concept_provider(base_t *_base) : concept_logic(_base) {}
+        using printable_t = concept_provider<ConceptProvider>;
+
+        concept_provider(ConceptProvider& p) : concept_logic(static_cast<base_t&>(p)) {}
 
       private:
         void _do_print() const final
@@ -86,19 +88,17 @@ class printable : public neam::enfield::ecs_concept<db_conf, printable>
 /// \note For most concepts, you can privately inherit from the concept::concept_provider<...> class.
 class truc2 : public neam::enfield::component<db_conf, truc2>, private printable::concept_provider<truc2>
 {
-  private:
-    using component = neam::enfield::component<db_conf, truc2>;
   public:
     truc2(param_t p)
-      : component(p),
-        printable::concept_provider<truc2>(this)
+      : component_t(p),
+        printable_t(*this)
     {
     }
 
     /// \brief Print a message
     /// \note the printable concept DOES NOT constrain the concept provider class to have a specific API.
     ///       all it asks is that you can do a xxx.print(); without causing a compilation error.
-    void print(const std::string &hello_message = "howdy") const
+    void print(const std::string& hello_message = "howdy") const
     {
       neam::cr::out().log("{} : truc2", hello_message);
     }
@@ -107,12 +107,10 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private printable
 /// \brief Another component + a concept provider
 class truc : public neam::enfield::component<db_conf, truc>, private printable::concept_provider<truc>
 {
-  private:
-    using component = neam::enfield::component<db_conf, truc>;
   public:
     truc(param_t p)
-      : component(p),
-        printable::concept_provider<truc>(this)
+      : component_t(p),
+        printable_t(*this)
     {
       // require another component. (could also be any other kind of attached object a component have the right to require)
       // required attached object are guaranteed to be living until after your component is completely destructed (or the last attached object
@@ -125,7 +123,7 @@ class truc : public neam::enfield::component<db_conf, truc>, private printable::
       //
       // WARNING: The use of the entity public interface IS FORBIDDEN. Doing so will most likely trigger exceptions (or crashes) at some points BECAUSE THAT'S NOT A CORRECT USAGE.
       //          That is the reason you don't have a pointer to the entity. (Moreover entity can be moved around in memory, so... Good luck with that).
-      require<truc2>().print("greetings from truc::truc");
+      comp.print("greetings from truc::truc");
     }
 
     std::string print() const
@@ -134,18 +132,21 @@ class truc : public neam::enfield::component<db_conf, truc>, private printable::
       // that function will check that the component is created and is effectively required, and return the reference to it.
       // This is wayy slower than storing a reference to it when you required it, but you can use it.
       //
-      // There's a get_unsafe<...>() that returns a pointer (null or valid, it stills throw when it's a poisoned pointer),
+      // There's a get_unsafe<...>() that returns a pointer (null or valid, it will still assert when it's a poisoned pointer),
       // but there's nothing stopping another thread to remove the component just after the call has completed, so the returned pointer
       // is NOT guaranteed to be valid (thus the get_unsafe<...>())
-      get_required<truc2>().print("greetings from truc::print");
+      comp.print("greetings from truc::print");
 
       neam::cr::out().log("hello: truc");
 
       return "truc";
     }
+
+  private:
+    truc2& comp = require<truc2>();
 };
 
-int main(int, char **)
+int main(int, char**)
 {
   neam::cr::out.min_severity = neam::cr::logger::severity::debug;
   neam::cr::out.register_callback(neam::cr::print_log_to_console, nullptr);
@@ -180,14 +181,14 @@ int main(int, char **)
   // There are no additional cost than running the function the exact number of printable there is in the DB.
   //
   // Notice how the type is deduced from the function parameter.
-  db.for_each([](printable &t)
+  db.for_each([](printable & t)
   {
     t.print_all();
   });
 
   // You can even query multiple attached objects. Only entities with every of those attached objects will be iterated over,
   // so be certain to put the "limiting" attached object first (the rarest attached object)
-  db.for_each([](printable &t, truc &tt)
+  db.for_each([](printable & t, truc & tt)
   {
     tt.print();
     t.print_all();

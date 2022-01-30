@@ -59,10 +59,10 @@ namespace neam::enfield
 
       /// \brief Add a new system to the system list
       template<typename System, typename... Args>
-      System &add_system(Args &&... args)
+      System& add_system(Args&& ... args)
       {
         systems.emplace_back(new System(std::forward<Args>(args)...));
-        return static_cast<System &>(*systems.back());
+        return static_cast<System&>(*systems.back());
       }
       /// \brief Remove a system from the list
       /// \warning This operation is quite slow
@@ -70,7 +70,7 @@ namespace neam::enfield
       void remove_system()
       {
         const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
-        systems.erase(std::remove_if(systems.begin(), systems.end(), [id](auto& sys)
+        systems.erase(std::remove_if(systems.begin(), systems.end(), [id](auto & sys)
         {
           return (sys->system_id == id);
         }), systems.end());
@@ -78,13 +78,13 @@ namespace neam::enfield
 
       /// \brief Retrieve a system from the list
       template<typename System>
-      System &get_system()
+      System& get_system()
       {
         const type_t id = type_id<System, typename DatabaseConf::system_type>::id;
         for (auto& sys : systems)
         {
           if (sys->system_id == id)
-            return *static_cast<System *>(sys);
+            return *static_cast<System*>(sys);
         }
         check::debug::n_assert(false, "Could not find system with type id {}", id);
       }
@@ -113,11 +113,11 @@ namespace neam::enfield
       ///
       /// \warning creating or destroying entities during the execution of a system is a very very bad idea
       threading::task& push_tasks(database_t& db, threading::task_manager& tm, neam::id_t group_name,
-                      bool sync_exec = false)
+                                  bool sync_exec = false)
       {
         const threading::group_t group = tm.get_group_id(group_name);
 
-        threading::task_wrapper final_task_wr = tm.get_task(group, [](){});
+        threading::task_wrapper final_task_wr = tm.get_task(group, []() {});
 
         // we only require the heavy/slow option when:
         //  - we have more than one system
@@ -189,7 +189,7 @@ namespace neam::enfield
         // for each entities, run all systems:
         for (uint32_t i = 0; i < entity_per_task && base_index + i < db.get_entity_count(); ++i)
         {
-          entity_data_t* data = db.get_entity(base_index + i);
+          entity_data_t& data = db.get_entity(base_index + i);
 
           systems[system_index]->try_run(data);
         }
@@ -209,7 +209,7 @@ namespace neam::enfield
         // for each entities, run all systems:
         for (uint32_t i = 0; i < entity_per_task && base_index + i < db.get_entity_count(); ++i)
         {
-          entity_data_t* data = db.get_entity(base_index + i);
+          entity_data_t& data = db.get_entity(base_index + i);
 
           for (auto& sys : systems)
             sys->try_run(data);

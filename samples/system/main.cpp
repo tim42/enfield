@@ -18,9 +18,9 @@
 #include "auto_updatable.hpp"
 #include "components.hpp"
 
-constexpr size_t frame_count = 500000;
-constexpr size_t thread_count = 6;
-constexpr size_t entity_count = 1024 * (thread_count + 1);
+constexpr size_t frame_count = 10000;
+constexpr size_t thread_count = 5;
+constexpr size_t entity_count = 16384 * 2 * (thread_count + 1);
 
 void init_entities(neam::enfield::database<sample::db_conf> &db, std::list<neam::enfield::entity<sample::db_conf>> &list)
 {
@@ -34,6 +34,7 @@ void init_entities(neam::enfield::database<sample::db_conf> &db, std::list<neam:
 //     if (i % 2 == 0)
       entity.add<sample::comp_2>();
   }
+  db.optimize();
 }
 
 int main(int, char **)
@@ -58,10 +59,6 @@ int main(int, char **)
   sysmgr.add_system<sample::auto_updatable::system>(db);
   sysmgr.add_system<sample::auto_updatable::system>(db);
   sysmgr.add_system<sample::auto_updatable::system>(db);
-  sysmgr.add_system<sample::auto_updatable::system>(db);
-  sysmgr.add_system<sample::auto_updatable::system>(db);
-  sysmgr.add_system<sample::auto_updatable::system>(db);
-  sysmgr.add_system<sample::auto_updatable::system>(db);
 
   // just used to hold entities (that way they aren't destroyed)
   std::list<neam::enfield::entity<sample::db_conf>> entity_list;
@@ -72,12 +69,13 @@ int main(int, char **)
   init_entities(db, entity_list);
 
   neam::cr::out().log("running a bit the systems [{} frames]...", frame_count);
+  neam::cr::out().log("Using {} threads...", thread_count + 1);
 
   std::atomic<unsigned> frame_index = 0;
   tm.set_start_task_group_callback("the-one-group"_rid, [&sysmgr, &tm, &db, &frame_index]()
   {
-    sysmgr.push_tasks(db, tm, "the-one-group"_rid, true)
-//     sysmgr.push_tasks(db, tm, "the-one-group"_rid, false)
+//     sysmgr.push_tasks(db, tm, "the-one-group"_rid, true)
+    sysmgr.push_tasks(db, tm, "the-one-group"_rid, false)
     .then([&]()
     {
       ++frame_index;
@@ -92,6 +90,8 @@ int main(int, char **)
     });
   });
 
+  
+  
   neam::cr::chrono chr;
   std::deque<std::thread> thr;
 
@@ -121,9 +121,11 @@ int main(int, char **)
 
   const double dt = chr.delta();
 
-    neam::cr::out().log("done: Average frame duration: {:.6}ms, time per entity: {:.6}us",
-                        ((dt / double(frame_count)) * 1e3),
-                        ((dt / double(frame_count * entity_count)) * 1e6));
+  neam::cr::out().log("done: Average frame duration: {:.6}ms, time per entity: {:.6}us",
+                      ((dt / double(frame_count)) * 1e3),
+                      ((dt / double(frame_count * entity_count)) * 1e6));
 
+  entity_list.clear();
+  neam::cr::out().debug("completed run and cleanup");
   return 0;
 }

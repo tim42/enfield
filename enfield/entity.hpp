@@ -60,7 +60,7 @@ namespace neam
 
         struct component_mask_t
         {
-          static constexpr size_t entry_count = (DatabaseConf::max_attached_objects_types + (sizeof(uint64_t) * 8 - 1)) / (sizeof(uint64_t) * 8);
+          static constexpr size_t entry_count = (DatabaseConf::max_attached_objects_types + 63) / (64);
 
           // perform (*this & other) == *this
           constexpr bool match(const component_mask_t& o) const
@@ -85,22 +85,22 @@ namespace neam
 
           constexpr void set(type_t id)
           {
-            const uint32_t index = id / ( sizeof ( uint64_t ) * 8 );
-            const uint64_t bit_mask = 1ul << ( id % ( sizeof ( uint64_t ) * 8 ) );
+            const uint32_t index = id / 64;
+            const uint64_t bit_mask = 1ul << (id % 64);
             mask[index] |= bit_mask;
           }
 
           constexpr void unset(type_t id)
           {
-            const uint32_t index = id / ( sizeof ( uint64_t ) * 8 );
-            const uint64_t bit_mask = 1ul << ( id % ( sizeof ( uint64_t ) * 8 ) );
+            const uint32_t index = id / 64;
+            const uint64_t bit_mask = 1ul << (id % 64);
             mask[index] &= ~bit_mask;
           }
 
           constexpr bool is_set(type_t id) const
           {
-            const uint32_t index = id / ( sizeof ( uint64_t ) * 8 );
-            const uint64_t bit_mask = 1ul << ( id % ( sizeof ( uint64_t ) * 8 ) );
+            const uint32_t index = id / 64;
+            const uint64_t bit_mask = 1ul << (id % 64);
             return (mask[index] & bit_mask) != 0;
           }
 
@@ -112,38 +112,29 @@ namespace neam
         /// \brief The data of the entity itself isn't held by the instance of the entity, but lives in the DB
         struct data_t
         {
-          data_t (id_t _entity_id, database_t *_db) : entity_id(_entity_id), db(_db) {}
+          data_t (database_t& _db) : db(_db) {}
           data_t(data_t&&) = default;
           ~data_t() = default;
 
           data_t() = delete;
           data_t(const data_t&) = delete;
-          data_t &operator = (const data_t&) = delete;
-          data_t &operator = (data_t&&) = delete;
+          data_t& operator = (const data_t&) = delete;
+          data_t& operator = (data_t&&) = delete;
 
-          /// \brief Local id of the entity (local = not networked)
-          /// This identifier is used to identify the entity in the DB
-          const id_t entity_id = ~0u;
           uint64_t index = 0;
 
-          database_t * const db = nullptr;
+          database_t& db;
 
           /// \brief Allow a quick query of component this entity has
           component_mask_t mask;
 
           /// \brief The list of attached_objects this entity have
-          std::unordered_map<type_t, base_t *> attached_objects = std::unordered_map<type_t, base_t *>();
-
-          entity *owner = nullptr;
+          std::unordered_map<type_t, base_t*> attached_objects = std::unordered_map<type_t, base_t*>();
 
           /// \brief Check that everything is OK
           bool validate() const
           {
             if (attached_objects.size() > DatabaseConf::max_component_types)
-              return false;
-            if (!owner)
-              return false;
-            if (this != owner->data)
               return false;
 
             component_mask_t actual_mask;
@@ -164,30 +155,23 @@ namespace neam
         };
 
       private:
-        explicit entity(database_t &_db, data_t &_data) noexcept : db(&_db), data(&_data)
+        explicit entity(data_t& _data) : data(&_data)
         {
-          data->owner = this;
         }
 
       public:
         entity() = delete;
 
-        entity(entity &&o) : db(o.db), data(o.data)
+        entity(entity&& o) : data(o.data)
         {
-          o.db = nullptr;
           o.data = nullptr;
-          data->owner = this;
         }
 
-        entity &operator = (entity &&o)
+        entity& operator = (entity&& o)
         {
           if (this != &o)
           {
-            db->remove_entity(data);
-            db = o.db;
             data = o.data;
-            data->owner = this;
-            o.db = nullptr;
             o.data = nullptr;
           }
           return *this;
@@ -195,48 +179,40 @@ namespace neam
 
         ~entity()
         {
-          if (db && data)
-            db->remove_entity(data);
+          if (data != nullptr)
+            data->db.remove_entity(*data);
         }
 
         /// \brief Swap two entities
-        void swap(entity &o)
+        void swap(entity& o)
         {
-          std::swap(o.db, db);
           std::swap(o.data, data);
           o.data->owner = &o;
           data->owner = this;
         }
 
-        /// \brief Return the ID of the entity.
-        /// That ID can only be set when creating a new entity
-        id_t get_id() const
-        {
-          return data->entity_id;
-        }
-
         /// \brief Remove add an attached object
-        /// \note if an attached object of the same type has already been user-created, an exception is thrown
+        /// \note if an attached object of the same type has already been user-created it will assert
         /// \note you can't add views
         /// \see has()
         template<typename AttachedObject, typename... DataProvider>
-        AttachedObject &add(DataProvider *...provider)
+        AttachedObject& add(DataProvider&& ... provider)
         {
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_creatable>();
 
           if (has<AttachedObject>())
           {
-            AttachedObject *ret = get<AttachedObject>();
+            AttachedObject* ret = get<AttachedObject>();
 
-            base_t *bptr = ret;
+            base_t* bptr = ret;
             check::debug::n_assert(bptr->user_added == false, "The attached object is already present and has already been user-requested");
             bptr->user_added = true;
 
             return *ret;
           }
 
-          return db->template add_ao_user<AttachedObject, DataProvider...>(data, provider...);
+          return data->db.template add_ao_user<AttachedObject, DataProvider...>(*data, std::forward<DataProvider>(provider)...);
         }
 
         /// \brief Remove an attached object
@@ -249,14 +225,14 @@ namespace neam
 
           if (!has<AttachedObject>())
             return;
-          db->remove_ao_user(data, data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+          data->db.remove_ao_user(*data, *data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
         }
 
         /// \brief Return an attached object.
         /// If that attached object is not present, it returns nullptr
         /// \note has() is way faster than a get() when the component/attached object is present
         template<typename AttachedObject>
-        AttachedObject *get()
+        AttachedObject* get()
         {
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
@@ -270,7 +246,7 @@ namespace neam
         /// If that attached object is not present, it returns nullptr
         /// \note has() is way faster than a get() when the component/attached object is present
         template<typename AttachedObject>
-        const AttachedObject *get() const
+        const AttachedObject* get() const
         {
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
@@ -293,20 +269,18 @@ namespace neam
         }
 
         /// \brief Return the current database of the entity
-        database_t &get_database() { return *db; }
+        database_t& get_database() { return data->db; }
         /// \brief Return the current database of the entity
-        const database_t &get_database() const { return *db; }
+        const database_t& get_database() const { return data->db; }
 
         /// \brief Check that the entity is in a valid state
-        /// \note If that's not the case, it will throw something
         void validate() const
         {
           data->assert_valid();
         }
 
       private:
-        database_t *db = nullptr;
-        data_t *data = nullptr;
+        data_t* data = nullptr;
 
         friend class database<DatabaseConf>;
         friend class attached_object::base<DatabaseConf>;

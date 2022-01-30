@@ -45,7 +45,7 @@ namespace sample
       class concept_logic : public ecs_concept::base_concept_logic
       {
         protected:
-          concept_logic(base_t *_base) : ecs_concept::base_concept_logic(_base) {}
+          concept_logic(base_t& _base) : ecs_concept::base_concept_logic(_base) {}
 
           virtual void _do_update() = 0;
           friend class auto_updatable;
@@ -57,7 +57,9 @@ namespace sample
       class concept_provider : public concept_logic
       {
         public:
-          concept_provider(base_t *_base) : concept_logic(_base) {}
+          using auto_updatable_t = concept_provider<ConceptProvider>;
+
+          concept_provider(ConceptProvider& _base) : concept_logic(static_cast<base_t&>(_base)) {}
 
         private:
           void _do_update() final { get_base_as<ConceptProvider>().update(); }

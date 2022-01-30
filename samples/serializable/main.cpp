@@ -16,7 +16,7 @@ using db_conf = neam::enfield::db_conf::conservative_eccs;
 
 // Easy alias for the serializable concept. We want to serialize to JSON and use the current database conf
 // NOTE: The neam backend (the default one) is WAY faster than the JSON backend and is recommended (except when you need to debug)
-using serializable = neam::enfield::concepts::serializable<db_conf, neam::cr::persistence_backend::json>;
+using serializable = neam::enfield::concepts::serializable<db_conf>;
 
 // create a serializable name component
 // If you remove the "serializable::concept_provider", the name component will work the same, but won't be serializable.
@@ -24,30 +24,20 @@ using serializable = neam::enfield::concepts::serializable<db_conf, neam::cr::pe
 using name_component = neam::enfield::components::name<db_conf, serializable::concept_provider>;
 
 /// \brief A component + a concept provider
+/// This is for manual handling of the serialization. See truc for automatic serialization
 /// \note For most concepts, you can privately inherit from the concept::concept_provider<...> class.
 class truc2 : public neam::enfield::component<db_conf, truc2>, private serializable::concept_provider<truc2>
 {
-  private:
-    using component = neam::enfield::component<db_conf, truc2>;
   public:
     truc2(param_t p)
-      : component(p),
-        serializable::concept_provider<truc2>(this)
-    {
-    }
-
-    truc2(param_t p, neam::enfield::concepts::from_deserialization_t)
-      : component(p),
-        serializable::concept_provider<truc2>(this)
+      : component_t(p),
+        serializable_t(*this)
     {
       // unserialize the data member. This effectively performs an assignation.
       if (has_persistent_data())
       {
-        data = get_persistent_data();
-        //assign_persistent_data(data);
+        refresh_from_deserialization();
       }
-
-      print("deserialized !");
     }
 
     void refresh_from_deserialization()
@@ -58,10 +48,10 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private serializa
     /// \brief Print a message
     void print(const std::string &hello_message = "howdy") const
     {
-      neam::cr::out.log() << LOGGER_INFO << hello_message << ": truc2" << std::endl;
+      neam::cr::out().log("{}: truc2", hello_message);
       for (const auto &it : data)
       {
-        neam::cr::out.log() << LOGGER_INFO << "  { " << it.first << ", " << it.second << " }" << std::endl;
+        neam::cr::out().log("{{{}, {}}}", it.first, it.second);
       }
     }
 
@@ -77,65 +67,52 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private serializa
     friend serializable::concept_provider<truc2>;
 };
 
-/// \brief Another component + a concept provider
-class truc : public neam::enfield::component<db_conf, truc>, private serializable::concept_provider<truc>
+/// \brief Another component + a concept provider, this time the component itself is serializable (which makes things easier)
+/// The component is auto-serializable, without any input from the user
+struct truc : public neam::enfield::component<db_conf, truc>, private serializable::concept_provider<truc>
 {
-  private:
-    using component = neam::enfield::component<db_conf, truc>;
-  public:
-    truc(param_t p)
-      : component(p),
-        serializable::concept_provider<truc>(this)
-    {
-      // We require truc2
-      require<truc2>();
-    }
+  truc(param_t p)
+    : component_t(p),
+      serializable_t(*this)
+  {
+    // We require truc2
+    require<truc2>();
+  }
 
-    truc(param_t p, neam::enfield::concepts::from_deserialization_t t)
-      : component(p),
-        serializable::concept_provider<truc>(this)
-    {
-      // unserialize data
-      if (has_persistent_data())
-        assign_persistent_data(dummy);
+  std::string print() const
+  {
+    get_required<truc2>().print("greetings from truc::print");
 
-      // We require truc2, but by convention we have to forward the same arguments
-      // (else truc won't know that it can be deserialized)
-      require<truc2>(t);
-    }
+    neam::cr::out().log("hello: truc: data: {} / {}", dummy, other_dummy);
 
-    void refresh_from_deserialization()
-    {
-        dummy = get_persistent_data();
-    }
+    return "truc";
+  }
 
-    std::string print() const
-    {
-      get_required<truc2>().print("greetings from truc::print");
+  // our data
+  int dummy = -1;
+  std::string other_dummy = "some stirng";
 
-      neam::cr::out.log() << LOGGER_INFO << "hello: truc: data: " << dummy << std::endl;
+  friend serializable_t;
+};
 
-      return "truc";
-    }
-
-  private:
-    /// \brief Return the data. Can be anything that can be serialized by persistence.
-    int get_data_to_serialize() const { return dummy; }
-
-    // our data
-    int dummy = -1;
-
-    friend serializable::concept_provider<truc>;
+N_METADATA_STRUCT(truc)
+{
+  using member_list = neam::ct::type_list
+  <
+    N_MEMBER_DEF(dummy),
+    N_MEMBER_DEF(other_dummy)
+  >;
 };
 
 int main(int, char **)
 {
-  neam::cr::out.log_level = neam::cr::stream_logger::verbosity_level::debug;
+  neam::cr::out.min_severity = neam::cr::logger::severity::debug;
+  neam::cr::out.register_callback(neam::cr::print_log_to_console, nullptr);
 
   neam::enfield::database<db_conf> db;
   auto entity = db.create_entity();
 
-  entity.add<truc>();
+  entity.add<truc>().other_dummy = "yay it works !";
   entity.add<name_component>().data = "my awesome name !";
 
   truc2 *t2 = entity.get<truc2>();
@@ -146,15 +123,15 @@ int main(int, char **)
     {44, 45},
     {45, 46},
   };
-  t2->print("before serialization");
 
-  neam::cr::raw_data serialized_data;
+  entity.get<truc>()->print();
+
+  neam::raw_data serialized_data;
   db.for_each([&serialized_data, &db](serializable &s)
   {
     serialized_data = s.serialize();
-    neam::cr::out.log() << LOGGER_INFO << "serialized data:" << std::endl;
-    neam::cr::out.log() << LOGGER_INFO << (char *)serialized_data.data << std::endl;
-    db.break_for_each();
+
+    return neam::enfield::for_each::stop;
   });
 
   // This will destroy both truc and truc2
@@ -162,20 +139,15 @@ int main(int, char **)
 
   // // // // // // // // // // // // // // // // // // // // // //
 
-  // create a new entity
-  auto entity2 = db.create_entity();
+  // create a new entity from the serialized data:
+  auto entity2 = serializable::deserialize(db, serialized_data);
 
-  // this is how an entity is marked for deserialization. entity2 and serialized_data
-  // only need to be valid while the add<serializable::deserialization_marker> hasn't returned
-  //
-  // The entity is deserialized when the add<serializable::deserialization_marker> has returned,
-  // but has serializable::deserialization_marker can't be automatically removed it is a good practice to remove it
-  // right after the deserialization is done
-  entity2.add<serializable::deserialization_marker>(&entity2, &serialized_data);
-  entity2.remove<serializable::deserialization_marker>(); // cleanup
+  neam::cr::out().log("Has truc:  {}", entity2.has<truc>());
+  neam::cr::out().log("Has truc2: {}", entity2.has<truc2>());
+  neam::cr::out().log("Data holder's data: {}", entity2.get<name_component>()->data);
 
-  neam::cr::out.log() << LOGGER_INFO << "has<truc>: " << std::boolalpha << entity2.has<truc>() << std::endl;
-  neam::cr::out.log() << LOGGER_INFO << "has<truc2>: " << std::boolalpha << entity2.has<truc2>() << std::endl;
+  entity2.get<truc>()->print();
+//   entity.get<truc2>()->print("aafter serialization");
 
   return 0;
 }

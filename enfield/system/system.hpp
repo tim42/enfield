@@ -68,7 +68,7 @@ namespace neam
 
       protected:
         /// \brief constructor
-        system(database<DatabaseConf> &_db)
+        system(database<DatabaseConf>& _db)
           : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id, false)
         {
           // setup the mask
@@ -84,14 +84,14 @@ namespace neam
         /// Queries performed on the database won't show that this attached object is removed
         /// \note Only usable in SystemClass::on_entity();
         template<typename AttachedObject>
-        void remove(AttachedObject &ao);
+        void remove(AttachedObject& ao);
 
         /// \brief Add an attached object to the entity
         /// further systems that depends on that attached object will be run for that entity,
         /// but queries performed on the database won't show that this attached object is added
         /// \note Only usable in SystemClass::on_entity();
         template<typename AttachedObject, typename... DataProvider>
-        void add(DataProvider *...providers);
+        void add(DataProvider* ...providers);
 
       private:
         using entity_data_t = typename entity<DatabaseConf>::data_t;
@@ -101,17 +101,17 @@ namespace neam
         template<typename... AttachedObjects>
         struct run_helper_t
         {
-          static auto run(SystemClass* self, entity_data_t* data)
+          static auto run(SystemClass& self, entity_data_t& data)
           {
-            self->on_entity(*self->db.template entity_get<AttachedObjects>(data)...);
+            self.on_entity(*self.db.template entity_get<AttachedObjects>(data)...);
           }
         };
 
-        void run(entity_data_t *data) final override
+        void run(entity_data_t& data) final override
         {
           using list = ct::list::for_each<typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list, rm_rcv>;
           using helper = typename ct::list::extract<list>::template as<run_helper_t>;
-          helper::run(static_cast<SystemClass *>(this), data);
+          helper::run(*static_cast<SystemClass*>(this), data);
         }
     };
   } // namespace enfield

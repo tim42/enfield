@@ -45,16 +45,17 @@ namespace neam
     {
       public:
         using param_t = typename attached_object::base<DatabaseConf>::param_t;
+        using component_t  = component<DatabaseConf, ComponentType>;
 
         virtual ~component() = default;
 
       protected:
         component(param_t _param)
           : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class, ComponentType>
-          (
-            _param,
-            type_id<ComponentType, typename DatabaseConf::attached_object_type>::id
-          )
+            (
+              _param,
+              type_id<ComponentType, typename DatabaseConf::attached_object_type>::id
+            )
         {
         }
     };

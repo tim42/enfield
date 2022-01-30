@@ -49,14 +49,14 @@ namespace neam
     {
       public:
         virtual std::string get_system_name() const = 0;
-        base_system(database<DatabaseConf> &_db, type_t _system_id, bool _has_barrier_before)
+        base_system(database<DatabaseConf>& _db, type_t _system_id, bool _has_barrier_before)
           : db(_db), system_id(_system_id), has_barrier_before(_has_barrier_before)
         {
         }
         virtual ~base_system() = default;
 
       protected:
-        database<DatabaseConf> &db;
+        database<DatabaseConf>& db;
 
         /// \brief Called at the very beggining of the system update cycle,
         /// before any entity goes down the pipes
@@ -72,13 +72,13 @@ namespace neam
 
 
         /// \brief Run if the entity has the required attached objects
-        void try_run(entity_data_t *data)
+        void try_run(entity_data_t& data)
         {
-          if (mask.match(data->mask))
+          if (mask.match(data.mask))
             run(data);
         }
 
-        virtual void run(entity_data_t *data) = 0;
+        virtual void run(entity_data_t& data) = 0;
 
         template<typename AO>
         using id_t = type_id<AO, typename DatabaseConf::attached_object_type>;

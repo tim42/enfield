@@ -40,10 +40,8 @@ namespace sample
   /// \brief Deadly stupid and simple component that does nothing
   class comp_1 : public neam::enfield::component<sample::db_conf, comp_1>
   {
-    private:
-      using component = neam::enfield::component<sample::db_conf, comp_1>;
     public:
-      comp_1(param_t p) : component(p)
+      comp_1(param_t p) : component_t(p)
       {
       }
 
@@ -54,11 +52,10 @@ namespace sample
   class comp_2 : public neam::enfield::component<sample::db_conf, comp_2>,
     private auto_updatable::concept_provider<comp_2>
   {
-    private:
-      using component = neam::enfield::component<sample::db_conf, comp_2>;
     public:
       comp_2(param_t p)
-        : component(p), auto_updatable::concept_provider<comp_2>(this),
+        : component_t(p),
+          auto_updatable_t(*this),
           comp(require<comp_1>())
       {
       }
@@ -70,7 +67,7 @@ namespace sample
       }
 
       comp_1 &comp;
-      friend class auto_updatable::concept_provider<comp_2>;
+      friend auto_updatable_t;
   };
 } // namespace sample
 
