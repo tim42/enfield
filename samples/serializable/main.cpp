@@ -9,6 +9,7 @@
 
 #include <enfield/enfield.hpp>
 #include <enfield/concept/serializable.hpp> // we need the serializable builtin concept
+#include <enfield/concept/printable.hpp>
 #include <enfield/component/name.hpp> // for the name component
 
 using db_conf = neam::enfield::db_conf::conservative_eccs;
@@ -17,11 +18,12 @@ using db_conf = neam::enfield::db_conf::conservative_eccs;
 // Easy alias for the serializable concept. We want to serialize to JSON and use the current database conf
 // NOTE: The neam backend (the default one) is WAY faster than the JSON backend and is recommended (except when you need to debug)
 using serializable = neam::enfield::concepts::serializable<db_conf>;
+using printable = neam::enfield::concepts::printable<db_conf>;
 
 // create a serializable name component
 // If you remove the "serializable::concept_provider", the name component will work the same, but won't be serializable.
 // You can even add more concept_providers to the list if you want (like editable).
-using name_component = neam::enfield::components::name<db_conf, serializable::concept_provider>;
+using name_component = neam::enfield::components::name<db_conf, serializable::concept_provider, printable::concept_provider>;
 
 /// \brief A component + a concept provider
 /// This is for manual handling of the serialization. See truc for automatic serialization
@@ -69,23 +71,17 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private serializa
 
 /// \brief Another component + a concept provider, this time the component itself is serializable (which makes things easier)
 /// The component is auto-serializable, without any input from the user
-struct truc : public neam::enfield::component<db_conf, truc>, private serializable::concept_provider<truc>
+struct truc : public neam::enfield::component<db_conf, truc>,
+              private serializable::concept_provider<truc>,
+              private printable::concept_provider<truc>
 {
   truc(param_t p)
     : component_t(p),
-      serializable_t(*this)
+      serializable_t(*this),
+      printable_t(*this)
   {
     // We require truc2
     require<truc2>();
-  }
-
-  std::string print() const
-  {
-    get_required<truc2>().print("greetings from truc::print");
-
-    neam::cr::out().log("hello: truc: data: {} / {}", dummy, other_dummy);
-
-    return "truc";
   }
 
   // our data
@@ -124,7 +120,7 @@ int main(int, char **)
     {45, 46},
   };
 
-  entity.get<truc>()->print();
+  entity.get<printable>()->print();
 
   neam::raw_data serialized_data;
   db.for_each([&serialized_data, &db](serializable &s)
@@ -146,8 +142,7 @@ int main(int, char **)
   neam::cr::out().log("Has truc2: {}", entity2.has<truc2>());
   neam::cr::out().log("Data holder's data: {}", entity2.get<name_component>()->data);
 
-  entity2.get<truc>()->print();
-//   entity.get<truc2>()->print("aafter serialization");
+  entity2.get<printable>()->print();
 
   return 0;
 }
