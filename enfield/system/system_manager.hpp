@@ -39,6 +39,7 @@
 
 #include <ntools/spinlock.hpp>
 #include <ntools/threading/threading.hpp>
+#include <ntools/tracy.hpp>
 
 namespace neam::enfield
 {
@@ -115,6 +116,7 @@ namespace neam::enfield
       threading::task& push_tasks(database_t& db, threading::task_manager& tm, neam::id_t group_name,
                                   bool sync_exec = false)
       {
+        TRACY_SCOPED_ZONE;
         const threading::group_t group = tm.get_group_id(group_name);
 
         threading::task_wrapper final_task_wr = tm.get_task(group, []() {});
@@ -149,6 +151,7 @@ namespace neam::enfield
     private:
       void sync_point(bool initial, database_t& db, threading::task_manager& tm, threading::task& final_task)
       {
+        TRACY_SCOPED_ZONE;
         if (initial)
           system_index = 0;
         else
@@ -182,6 +185,7 @@ namespace neam::enfield
 
       void run_sync_exec(database_t& db, threading::task_manager& tm, threading::task& next_sync)
       {
+        TRACY_SCOPED_ZONE;
         check::debug::n_assert(system_index < systems.size(), "Invalid system index");
 
         const uint32_t base_index = index.fetch_add(entity_per_task);
@@ -204,6 +208,7 @@ namespace neam::enfield
 
       void run_all_systems(database_t& db, threading::task_manager& tm, threading::task& final_task)
       {
+        TRACY_SCOPED_ZONE;
         const uint32_t base_index = index.fetch_add(entity_per_task);
 
         // for each entities, run all systems:
@@ -225,7 +230,7 @@ namespace neam::enfield
 
     private:
       const unsigned max_task_count = (std::thread::hardware_concurrency() + 2) * 2;
-      unsigned entity_per_task = 256;
+      unsigned entity_per_task = 1024;
 
       unsigned system_index = 0;
 

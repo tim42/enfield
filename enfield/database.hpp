@@ -42,6 +42,7 @@
 #include <ntools/memory_pool.hpp>
 #include <ntools/function.hpp>
 #include <ntools/debug/assert.hpp>
+#include <ntools/tracy.hpp>
 
 namespace neam
 {
@@ -169,6 +170,7 @@ namespace neam
             template<typename... FilterAttachedObjects>
             query_t filter(query_condition condition = query_condition::each) const
             {
+              TRACY_SCOPED_ZONE;
               (static_assert_check_attached_object<DatabaseConf, FilterAttachedObjects>(), ...);
               (static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::user_getable>(), ...);
               std::deque<AttachedObject*> next_result;
@@ -192,6 +194,7 @@ namespace neam
             template<typename... FilterAttachedObjects>
             std::array<query_t, 2> filter_both(query_condition condition = query_condition::each) const
             {
+              TRACY_SCOPED_ZONE;
               (static_assert_check_attached_object<DatabaseConf, FilterAttachedObjects>(), ...);
               (static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::user_getable>(), ...);
 
@@ -256,6 +259,7 @@ namespace neam
         template<typename Function>
         void for_each(Function&& func)
         {
+          TRACY_SCOPED_ZONE;
           using list = ct::list::for_each<typename ct::function_traits<Function>::arg_list, rm_rcv>;
 
           for_each_list<list>(func);
@@ -264,6 +268,7 @@ namespace neam
         template<typename Function>
         void for_each(Function&& func) const
         {
+          TRACY_SCOPED_ZONE;
           using list = ct::list::for_each<typename ct::function_traits<Function>::arg_list, rm_rcv>;
 
           for_each_list<list>(func);
@@ -274,6 +279,7 @@ namespace neam
         template<typename AttachedObject>
         query_t<AttachedObject> query() const
         {
+          TRACY_SCOPED_ZONE;
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
           static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
 
@@ -294,6 +300,7 @@ namespace neam
         /// \todo a multi-threaded version
         void optimize()
         {
+          TRACY_SCOPED_ZONE;
           std::sort(entity_list.begin(), entity_list.end());
           for (uint32_t i = 0; i < entity_list.size(); ++i)
             entity_list[i]->index = i;
