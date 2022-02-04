@@ -19,7 +19,7 @@
 #include "components.hpp"
 
 constexpr size_t frame_count = 10000;
-constexpr size_t thread_count = 5;
+constexpr size_t thread_count = 7;
 constexpr size_t entity_count = 16384 * 2 * (thread_count + 1);
 
 void init_entities(neam::enfield::database<sample::db_conf> &db, std::list<neam::enfield::entity<sample::db_conf>> &list)
@@ -45,7 +45,7 @@ int main(int, char **)
   neam::threading::task_manager tm;
   {
     neam::threading::task_group_dependency_tree tgd;
-    tgd.add_task_group("the-one-group"_rid);
+    tgd.add_task_group("the-one-group"_rid, "the-one-group");
     auto tree = tgd.compile_tree();
 //     tree.print_debug();
 
@@ -71,11 +71,13 @@ int main(int, char **)
   neam::cr::out().log("running a bit the systems [{} frames]...", frame_count);
   neam::cr::out().log("Using {} threads...", thread_count + 1);
 
+
   std::atomic<unsigned> frame_index = 0;
   tm.set_start_task_group_callback("the-one-group"_rid, [&sysmgr, &tm, &db, &frame_index]()
   {
-//     sysmgr.push_tasks(db, tm, "the-one-group"_rid, true)
-    sysmgr.push_tasks(db, tm, "the-one-group"_rid, false)
+    TRACY_SCOPED_ZONE;
+    sysmgr.push_tasks(db, tm, "the-one-group"_rid, true)
+//     sysmgr.push_tasks(db, tm, "the-one-group"_rid, false)
     .then([&]()
     {
       ++frame_index;
@@ -90,8 +92,8 @@ int main(int, char **)
     });
   });
 
-  
-  
+
+  TRACY_NAME_THREAD("Worker");
   neam::cr::chrono chr;
   std::deque<std::thread> thr;
 
@@ -99,6 +101,7 @@ int main(int, char **)
   {
     thr.emplace_back([&frame_index, &tm]()
     {
+      TRACY_NAME_THREAD("Worker");
       while (frame_index < frame_count)
       {
         tm.wait_for_a_task();

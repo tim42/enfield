@@ -125,7 +125,8 @@ int main(int, char **)
   neam::raw_data serialized_data;
   db.for_each([&serialized_data, &db](serializable &s)
   {
-    serialized_data = s.serialize();
+    neam::rle::status st;
+    serialized_data = s.serialize(st);
 
     return neam::enfield::for_each::stop;
   });
