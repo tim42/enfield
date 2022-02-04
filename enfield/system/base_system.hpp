@@ -60,11 +60,11 @@ namespace neam
 
         /// \brief Called at the very beggining of the system update cycle,
         /// before any entity goes down the pipes
-        virtual void begin() = 0;
+        virtual void begin() {}
 
         /// \brief Called at the very end of the system update cycle
         /// after every entity has been updated
-        virtual void end() = 0;
+        virtual void end() {}
 
       private:
         using entity_data_t = typename entity<DatabaseConf>::data_t;

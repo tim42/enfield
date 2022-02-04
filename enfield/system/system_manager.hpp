@@ -119,18 +119,31 @@ namespace neam::enfield
         TRACY_SCOPED_ZONE;
         const threading::group_t group = tm.get_group_id(group_name);
 
-        threading::task_wrapper final_task_wr = tm.get_task(group, []() {});
+        threading::task_wrapper final_task_wr;
 
         // we only require the heavy/slow option when:
         //  - we have more than one system
         //  - we are required to have sync points
         if (sync_exec && systems.size() > 1)
         {
+          final_task_wr = tm.get_task(group, []() {});
+
           sync_point(true, db, tm, *final_task_wr);
         }
         else // not sync_exec
         {
+          final_task_wr = tm.get_task(group, [this]()
+          {
+            // call end() on all the systems:
+            for (auto& it : systems)
+              it->end();
+          });
           index.store(0, std::memory_order_relaxed);
+
+
+          // call begin() on all the systems:
+          for (auto& it : systems)
+            it->begin();
 
           // compute the number of task to dispatch, but limit that to a max number
           // to avoid saturating the task system
@@ -153,15 +166,22 @@ namespace neam::enfield
       {
         TRACY_SCOPED_ZONE;
         if (initial)
+        {
           system_index = 0;
+        }
         else
+        {
+          systems[system_index]->end();
           ++system_index;
+        }
 
         index.store(0, std::memory_order_release);
 
         // add the task for the next system
         if (system_index < systems.size())
         {
+          systems[system_index]->begin();
+
           // create the final sync task:
           threading::task_wrapper next_sync_wr = tm.get_task(final_task.get_task_group(), [this, &db, &tm, &final_task]()
           {
