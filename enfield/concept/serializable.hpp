@@ -42,8 +42,8 @@ namespace neam::enfield::concepts
   {
     struct serialized_entity
     {
-      std::vector<type_t> user_added_components;
-      std::map<type_t, raw_data> serialized_components;
+      std::vector<uint64_t> user_added_components;
+      std::map<uint64_t, raw_data> serialized_components;
     };
   }
 
@@ -75,12 +75,12 @@ namespace neam::enfield::concepts
         protected:
           /// \brief Internal only, perform the serialization of the AO
           virtual raw_data _do_serialize(rle::status& st) = 0;
+          virtual uint64_t _get_type_hash() const = 0;
           virtual void _do_refresh_serializable_data() = 0;
           virtual void _do_remove(entity<DatabaseConf>& entity) = 0;
 
         private:
           bool _is_user_added() const { return this->get_base().is_user_added(); }
-          type_t _get_component_type_id() const { return this->get_base().object_type_id; }
 
           friend class serializable<DatabaseConf>;
       };
@@ -124,7 +124,7 @@ namespace neam::enfield::concepts
             check::debug::n_assert(data != nullptr, "get_persistent_data() called outside deserialization");
 
             const ConceptProvider& base = this->template get_base_as<ConceptProvider>();
-            const auto& it = data->serialized_components.find(base.object_type_id);
+            const auto& it = data->serialized_components.find(base._get_type_hash());
             check::debug::n_assert(it != data->serialized_components.end(), "get_persistent_data(): no data found for concept provider");
 
             rle::status rle_st = rle::status::success;
@@ -136,7 +136,7 @@ namespace neam::enfield::concepts
           }
 
         private:
-          virtual raw_data _do_serialize(rle::status& st) final override
+          raw_data _do_serialize(rle::status& st) final override
           {
             ConceptProvider& base = this->template get_base_as<ConceptProvider>();
 
@@ -150,6 +150,11 @@ namespace neam::enfield::concepts
             }
           }
 
+          uint64_t _get_type_hash() const final override
+          {
+            return ct::type_hash<ConceptProvider>;
+          }
+
           void _do_refresh_serializable_data() final override
           {
             if constexpr (metadata::concepts::StructWithMetadata<ConceptProvider>)
@@ -159,7 +164,7 @@ namespace neam::enfield::concepts
               check::debug::n_assert(data != nullptr, "get_persistent_data() called outside deserialization");
 
               ConceptProvider& base = this->template get_base_as<ConceptProvider>();
-              const auto& it = data->serialized_components.find(base.object_type_id);
+              const auto& it = data->serialized_components.find(base._get_type_hash());
               check::debug::n_assert(it != data->serialized_components.end(), "get_persistent_data(): no data found for concept provider");
 
               rle::status rle_st = rle::in_place_deserialize(it->second, base);
@@ -219,6 +224,11 @@ namespace neam::enfield::concepts
             return {};
           };
 
+          uint64_t _get_type_hash() const final override
+          {
+            return ct::type_hash<deserialization_marker>;
+          }
+
           void _do_remove(entity<DatabaseConf>& ) final override
           {
             // Cannot remove as we very probably are still in the constructor
@@ -243,7 +253,7 @@ namespace neam::enfield::concepts
         {
           if (this->get_concept_provider(i)._is_user_added())
           {
-            serialized_data.user_added_components.push_back(this->get_concept_provider(i)._get_component_type_id());
+            serialized_data.user_added_components.push_back(this->get_concept_provider(i)._get_type_hash());
           }
         }
 
@@ -255,7 +265,7 @@ namespace neam::enfield::concepts
 
         for (size_t i = 0; i < this->get_concept_providers_count(); ++i)
         {
-          serialized_data.serialized_components.emplace(this->get_concept_provider(i)._get_component_type_id(), this->get_concept_provider(i)._do_serialize(st));
+          serialized_data.serialized_components.emplace(this->get_concept_provider(i)._get_type_hash(), this->get_concept_provider(i)._do_serialize(st));
         }
 
         return rle::serialize(serialized_data, &st);
@@ -288,14 +298,14 @@ namespace neam::enfield::concepts
       void deserialize(entity<DatabaseConf>& entity, internal::serialized_entity&& serialized_entity)
       {
         // generate the list of present attached objects
-        std::map<type_t, concept_logic&> present_attached_objects;
+        std::map<uint64_t, concept_logic&> present_attached_objects;
         this->for_each_concept_provider([&present_attached_objects](concept_logic & prov)
         {
-          present_attached_objects.emplace(prov.get_base().object_type_id, prov);
+          present_attached_objects.emplace(prov._get_type_hash(), prov);
         });
 
         persistent_data = &serialized_entity;
-        for (type_t it : serialized_entity.user_added_components)
+        for (uint64_t it : serialized_entity.user_added_components)
         {
           auto pao = present_attached_objects.find(it);
           if (pao != present_attached_objects.end())
@@ -345,7 +355,7 @@ namespace neam::enfield::concepts
   template<typename ConceptProvider>
   int serializable<DatabaseConf>::concept_provider<ConceptProvider>::_dummy_ = []()
   {
-    serializable::require_map.emplace(type_id<ConceptProvider, typename DatabaseConf::attached_object_type>::id, &require_concept_provider);
+    serializable::require_map.emplace(ct::type_hash<ConceptProvider>, &require_concept_provider);
     return 0;
   }();
 }
