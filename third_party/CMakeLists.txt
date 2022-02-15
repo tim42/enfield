@@ -1,6 +1,9 @@
 
 # other easy to configure third party:
-add_subdirectory("./tracy")
+if (${USE_TRACY})
+  add_subdirectory("./tracy")
+endif()
+
 add_subdirectory("./fmt")
 add_subdirectory("./ntools")
 
