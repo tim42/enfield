@@ -50,11 +50,11 @@ namespace neam
         virtual ~component() = default;
 
       protected:
-        component(param_t _param)
+        component(param_t _param, attached_object::creation_flags flags = attached_object::creation_flags::none)
           : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class, ComponentType>
             (
               _param,
-              type_id<ComponentType, typename DatabaseConf::attached_object_type>::id
+              flags
             )
         {
         }

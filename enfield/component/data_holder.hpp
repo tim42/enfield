@@ -51,17 +51,17 @@ namespace neam
         private:
           using component = neam::enfield::component<DatabaseConf, data_holder<DatabaseConf, Data, ConceptProviders...>>;
         public:
-          data_holder(typename component::param_t p)
-            : component(p),
+          data_holder(typename component::param_t p, attached_object::creation_flags flags = attached_object::creation_flags::none)
+            : component(p, flags),
               ConceptProviders<data_holder<DatabaseConf, Data, ConceptProviders...>>(*this)...
           {
           }
 
           /// \brief If you specify a data_t* (or Data*) argument to the constructor, it will be used to initialize the data member
-          data_holder(typename component::param_t p, Data *data_ptr)
+          data_holder(typename component::param_t p, const Data& _data)
             : component(p),
               ConceptProviders<data_holder<DatabaseConf, Data, ConceptProviders...>>(*this)...,
-              data(*data_ptr)
+              data(_data)
           {
           }
 

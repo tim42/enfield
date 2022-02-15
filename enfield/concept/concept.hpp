@@ -107,11 +107,13 @@ namespace neam
         };
 
       protected:
-        ecs_concept(param_t _param)
+        // the default for concepts is to be fully synchrone with the db changes
+        // it's a bit slow, but should allow much more transient attached_objects
+        ecs_concept(param_t _param, attached_object::creation_flags flags = attached_object::creation_flags::force_immediate_changes)
           : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
             (
               _param,
-              type_id<ConceptType, typename DatabaseConf::attached_object_type>::id
+              flags
             )
         {
           // checks: (can't be in the class body, as the whole base_concept & ConceptType types have to be defined.
@@ -124,16 +126,16 @@ namespace neam
         }
 
         template<typename UnaryFunction>
-        void for_each_concept_provider(const UnaryFunction& func)
+        void for_each_concept_provider(UnaryFunction&& func)
         {
-          for (base_concept_logic* it : concept_providers)
-            func(*static_cast<typename ConceptType::concept_logic*>(it));
+          for (uint32_t i = 0; i < concept_providers.size(); ++i)
+            func(*static_cast<typename ConceptType::concept_logic*>(concept_providers[i]));
         }
         template<typename UnaryFunction>
-        void for_each_concept_provider(const UnaryFunction& func) const
+        void for_each_concept_provider(UnaryFunction&& func) const
         {
-          for (const base_concept_logic* it : concept_providers)
-            func(*static_cast<const typename ConceptType::concept_logic*>(it));
+          for (uint32_t i = 0; i < concept_providers.size(); ++i)
+            func(*static_cast<const typename ConceptType::concept_logic*>(concept_providers[i]));
         }
 
         size_t get_concept_providers_count() const
@@ -143,20 +145,15 @@ namespace neam
 
         auto get_concept_provider(size_t i) -> auto&
         {
+          check::debug::n_assert(i < concept_providers.size(), "get_concept_provider: out of bound access");
+
           return *static_cast<typename ConceptType::concept_logic*>(concept_providers[i]);
         }
         auto get_concept_provider(size_t i) const -> const auto&
         {
-          return *static_cast<const typename ConceptType::concept_logic*>(concept_providers[i]);
-        }
+          check::debug::n_assert(i < concept_providers.size(), "get_concept_provider: out of bound access");
 
-        auto _get_concept_providers() -> auto
-        {
-          return reinterpret_cast<typename ConceptType::concept_logic**>(concept_providers.data());
-        }
-        auto _get_concept_providers() const -> auto
-        {
-          return reinterpret_cast<const typename ConceptType::concept_logic* const*>(concept_providers.data());
+          return *static_cast<const typename ConceptType::concept_logic*>(concept_providers[i]);
         }
 
       private:

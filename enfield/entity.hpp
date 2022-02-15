@@ -50,62 +50,17 @@ namespace neam
     /// \brief An entity. The entity cannot be copied, only moved. If you want to hold more than one entity,
     /// please use the memory management scheme you like the most (except reference counting, because screw ref. counts)
     /// \tparam DatabaseConf The database configuration
-    /// \note An entity is NEVER dynamically allocated.
-    /// \note Attached objects (components, views, ...) should never use the API of the entity: you can't hold a pointer to it as it may be moved asynchronously.
+    /// \note Attached objects (components, views, ...) should never use the API of the entity:
+    ///       you can't hold a pointer to it as it may be moved asynchronously.
+    /// \warning Entity (and all operations associated with them) are inherently NOT thread safe
+    ///          Only a single thread should have ownership and perform write/modify operations on an entity
+    ///          If you know that an entity is to be modified by multiple threads,
+    ///          Handle it like any other non-thread-safe objects and use an external lock.
     template<typename DatabaseConf>
     class entity
     {
       public:
         using database_t = database<DatabaseConf>;
-
-        struct component_mask_t
-        {
-          static constexpr size_t entry_count = (DatabaseConf::max_attached_objects_types + 63) / (64);
-
-          // perform (*this & other) == *this
-          constexpr bool match(const component_mask_t& o) const
-          {
-            for (size_t j = 0; j < entry_count; ++j)
-            {
-              if ((mask[j] & o.mask[j]) != mask[j])
-                return false;
-            }
-            return true;
-          }
-
-          constexpr bool operator == (const component_mask_t& o) const
-          {
-            for (size_t j = 0; j < entry_count; ++j)
-            {
-              if (mask[j] != o.mask[j])
-                return false;
-            }
-            return true;
-          }
-
-          constexpr void set(type_t id)
-          {
-            const uint32_t index = id / 64;
-            const uint64_t bit_mask = 1ul << (id % 64);
-            mask[index] |= bit_mask;
-          }
-
-          constexpr void unset(type_t id)
-          {
-            const uint32_t index = id / 64;
-            const uint64_t bit_mask = 1ul << (id % 64);
-            mask[index] &= ~bit_mask;
-          }
-
-          constexpr bool is_set(type_t id) const
-          {
-            const uint32_t index = id / 64;
-            const uint64_t bit_mask = 1ul << (id % 64);
-            return (mask[index] & bit_mask) != 0;
-          }
-
-          uint64_t mask[entry_count] = {0};
-        };
 
       private:
         using base_t = attached_object::base<DatabaseConf>;
@@ -126,10 +81,11 @@ namespace neam
           database_t& db;
 
           /// \brief Allow a quick query of component this entity has
-          component_mask_t mask;
+          attached_object::mask_t<DatabaseConf> mask;
 
           /// \brief The list of attached_objects this entity have
-          std::unordered_map<type_t, base_t*> attached_objects = std::unordered_map<type_t, base_t*>();
+          /// (we use a linear array as we don't expect that there will be more than 100 components on most entities)
+          std::vector<std::pair<type_t, base_t*>> attached_objects;
 
           /// \brief Check that everything is OK
           bool validate() const
@@ -137,7 +93,7 @@ namespace neam
             if (attached_objects.size() > DatabaseConf::max_component_types)
               return false;
 
-            component_mask_t actual_mask;
+            attached_object::mask_t<DatabaseConf> actual_mask;
             for (const auto& it : attached_objects)
               actual_mask.set(it.first);
 
@@ -151,6 +107,69 @@ namespace neam
           void assert_valid() const
           {
             check::debug::n_assert(validate(), "Entity is in invalid state");
+          }
+
+          /// \brief Return true if the entity has an attached object of that type
+          bool has(const type_t id) const
+          {
+            return mask.is_set(id);
+          }
+
+          /// \brief Return true if the entity has an attached object of that type
+          template<typename AttachedObject>
+          bool has() const
+          {
+            const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+            return has(id);
+          }
+
+          const base_t* get(const type_t id) const
+          {
+            if (!has(id))
+              return nullptr;
+            for (const auto& it : attached_objects)
+            {
+              if (it.first == id)
+              {
+                if (it.second != (base_t*)(k_poisoned_pointer))
+                  return it.second;
+                return nullptr;
+              }
+            }
+            return nullptr;
+          }
+          base_t* get(const type_t id)
+          {
+            return const_cast<base_t*>(const_cast<const data_t*>(this)->get(id));
+          }
+
+          template<typename AttachedObject>
+          AttachedObject* get()
+          {
+            return static_cast<AttachedObject*>(get(type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id));
+          }
+          template<typename AttachedObject>
+          const AttachedObject* get() const
+          {
+            return static_cast<const AttachedObject*>(get(type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id));
+          }
+
+          /// \brief Remove an attached object from the entity
+          void remove_attached_object(type_t id)
+          {
+            if (!has(id))
+              return;
+            for (uint32_t i = 0; i < attached_objects.size(); ++i)
+            {
+              if (attached_objects[i].first == id)
+              {
+                std::swap(attached_objects.back(), attached_objects[i]);
+                attached_objects.pop_back();
+                return;
+              }
+            }
+            return;
+
           }
         };
 
@@ -191,11 +210,16 @@ namespace neam
           data->owner = this;
         }
 
-        /// \brief Remove add an attached object
+        /// \brief Add an attached object
         /// \note if an attached object of the same type has already been user-created it will assert
         /// \note you can't add views
         /// \see has()
-        template<typename AttachedObject, typename... DataProvider>
+        template
+        <
+          typename AttachedObject,
+          attached_object::creation_flags Flags = attached_object::creation_flags::none,
+          typename... DataProvider
+        >
         AttachedObject& add(DataProvider&& ... provider)
         {
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
@@ -212,7 +236,7 @@ namespace neam
             return *ret;
           }
 
-          return data->db.template add_ao_user<AttachedObject, DataProvider...>(*data, std::forward<DataProvider>(provider)...);
+          return data->db.template add_ao_user<AttachedObject, DataProvider...>(*data, Flags, std::forward<DataProvider>(provider)...);
         }
 
         /// \brief Remove an attached object
@@ -225,7 +249,7 @@ namespace neam
 
           if (!has<AttachedObject>())
             return;
-          data->db.remove_ao_user(*data, *data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+          data->db.remove_ao_user(*data, *data->template get<AttachedObject>());
         }
 
         /// \brief Return an attached object.
@@ -237,9 +261,7 @@ namespace neam
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
 
-          if (!has<AttachedObject>())
-            return nullptr;
-          return static_cast<AttachedObject*>(data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+          return static_cast<AttachedObject*>(data->template get<AttachedObject>());
         }
 
         /// \brief Return an attached object.
@@ -251,9 +273,7 @@ namespace neam
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
 
-          if (!has<AttachedObject>())
-            return nullptr;
-          return static_cast<const AttachedObject*>(data->attached_objects[type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id]);
+          return static_cast<AttachedObject*>(data->template get<AttachedObject>());
         }
 
         /// \brief Return true if the entity has an attached object of that type
@@ -264,8 +284,7 @@ namespace neam
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
           static_assert_can<DatabaseConf, AttachedObject, attached_object_access::user_getable>();
 
-          const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-          return data->mask.is_set(id);
+          return data->template has<AttachedObject>();
         }
 
         /// \brief Return the current database of the entity

@@ -43,8 +43,85 @@ namespace neam
     template<typename DatabaseConf> class entity;
     template<typename DatabaseConf> class database;
 
+    static constexpr uint64_t k_poisoned_pointer = uint64_t(0xA5A5A5A00A5A5A5A);
+
     namespace attached_object
     {
+      enum class creation_flags
+      {
+        none, // equivalent to delayed / no change
+        delayed, // default behavior
+        transient, // fast creation and deletion, no for-each and queries
+        force_immediate_changes // slow creation (delayed deletion), immediate availlability to for-each and queries
+      };
+
+      template<typename DatabaseConf>
+      struct mask_t
+      {
+        mask_t()
+        {
+          for (size_t j = 0; j < entry_count; ++j)
+          {
+            mask[j] = 0;
+          }
+        }
+        static constexpr size_t entry_count = (DatabaseConf::max_attached_objects_types + 63) / (64);
+
+        // perform (*this & other) == *this
+        constexpr bool match(const mask_t& o) const
+        {
+          for (size_t j = 0; j < entry_count; ++j)
+          {
+            if ((mask[j] & o.mask[j]) != mask[j])
+              return false;
+          }
+          return true;
+        }
+
+        constexpr bool operator == (const mask_t& o) const
+        {
+          for (size_t j = 0; j < entry_count; ++j)
+          {
+            if (mask[j] != o.mask[j])
+              return false;
+          }
+          return true;
+        }
+
+        constexpr void set(type_t id)
+        {
+          const uint32_t index = id / 64;
+          const uint64_t bit_mask = 1ul << (id % 64);
+          mask[index] |= bit_mask;
+        }
+
+        constexpr void unset(type_t id)
+        {
+          const uint32_t index = id / 64;
+          const uint64_t bit_mask = 1ul << (id % 64);
+          mask[index] &= ~bit_mask;
+        }
+
+        constexpr bool is_set(type_t id) const
+        {
+          const uint32_t index = id / 64;
+          const uint64_t bit_mask = 1ul << (id % 64);
+          return (mask[index] & bit_mask) != 0;
+        }
+
+        bool has_any_bit_set() const
+        {
+          for (size_t j = 0; j < entry_count; ++j)
+          {
+            if (mask[j] != 0)
+              return true;
+          }
+          return false;
+        }
+
+        uint64_t mask[entry_count] = {0};
+      };
+
       /// \brief Everything attached to an entity (views, components, ...) must inherit indirectly from this class
       /// An attached object should not have access and must not use the public interface of the entity class.
       /// Moreover the entity class may be moved in memory and its displacement is not an atomic operation.
@@ -62,9 +139,11 @@ namespace neam
           using param_t = entity_data_t&;
 
         private:
-          base(param_t& _owner, type_t _object_type_id, type_t _class_id)
+          base(param_t& _owner, creation_flags flags, type_t _object_type_id, type_t _class_id)
             : object_type_id(_object_type_id), class_id(_class_id), owner(_owner)
           {
+            set_creation_flags(flags);
+
             check::debug::n_assert(object_type_id < DatabaseConf::max_attached_objects_types, "Too many attached object types for the current configuration");
           };
 
@@ -73,55 +152,79 @@ namespace neam
             owner.db.cleanup_ao_dependencies(*this, owner);
 
             check::debug::n_assert(authorized_destruction, "Trying to destroy an attached object in an unauthorized fashion");
-            check::debug::n_assert(required_by.empty(), "Trying to destroy an attached object when other attached objects require it");
-            check::debug::n_assert(requirements.empty(), "Trying to destroy an attached object that hasn't been properly cleaned-up (still some dependency)");
+            check::debug::n_assert(required_count == 0, "Trying to destroy an attached object when other attached objects require it");
+//             check::debug::n_assert(!requirements.has_any_bit_set(), "Trying to destroy an attached object that hasn't been properly cleaned-up (still some dependency)");
             check::debug::n_assert(!user_added, "Trying to destroy an attached object when only the user may remove it (it has been flagged as user-added)");
             check::debug::n_assert(!automanaged, "Trying to destroy an attached object when only itself may remove it (via self_destruct())");
           }
 
         public:
-          union
-          {
-            struct
-            {
-              /// \brief The id of the type of the attached object
-              const type_t object_type_id;
-              /// \brief The class id of the attached object (view, component, ...)
-              const type_t class_id;
-            };
-            const id_t gen_type_id;
-          };
-          static_assert(sizeof(id_t) == 2 * sizeof(type_t), "Incompatible id_t and type_t");
+          /// \brief The id of the type of the attached object
+          const type_t object_type_id;
+          /// \brief The class id of the attached object (view, component, ...)
+          const type_t class_id;
 
           /// \brief Return true if the user required this attached object
           bool is_user_added() const
           {
             return user_added;
           }
+
           /// \brief Return true if the attached object is automanaged (self destruction / self creation)
           bool is_automanaged() const
           {
             return automanaged;
           }
 
+          bool is_pending_destruction() const
+          {
+            return authorized_destruction;
+          }
+
         private:
+          /// \brief set the creation flags. Must be called during the construction process
+          void set_creation_flags(creation_flags flags)
+          {
+            fully_transient_attached_object = (flags == creation_flags::transient);
+            force_immediate_db_change = (flags == creation_flags::force_immediate_changes);
+            check::debug::n_assert(fully_transient_attached_object != force_immediate_db_change || !fully_transient_attached_object,
+                                   "Cannot have a fully transient object that should also apply changes in the DB");
+          }
+
+        private:
+          mask_t<DatabaseConf> requirements;
+
           /// \brief The entity that owns that attached object
           entity_data_t& owner;
+
           uint64_t index = 0;
 
-          bool user_added = false;
-          bool automanaged = false;
-          std::set<base*> required_by;
-          std::set<base*> requirements;
+          uint32_t required_count = 0;
 
-          bool authorized_destruction = false;
+          // can add up-to 32 flags
+          bool user_added : 1 = false;
+          bool automanaged : 1 = false;
+          bool authorized_destruction : 1 = false;
+          bool in_attached_object_db : 1 = false;
+
+          // If set to true, the attached-object will be fully transient.
+          // A transient attached-object is not added to the attached_object_db,
+          // meaning that:
+          //  - creation and deletion are much much faster
+          //  - querying it (for-each/query or some systems) will not return the attached-object
+          //  - concepts will still be updated (meaning queries on concepts will catch transient AO implementing such concepts)
+          // NOTE: all non-user-gettable attached-objects are fully-transient by default. (as for-each and such are not permitted)
+          bool fully_transient_attached_object : 1 = false;
+          // Cannot be set to true if fully_transient_attached_object is true.
+          // An attached-object created with this flag to true will immediatly be inserted in the attached-object db.
+          //  - creation will be slower, increasing lock contention
+          //  - queries, for-each, and some systems will be immediatly aware of that attached-object
+          //  - removal is still deferred, as this would impact for-each, systems and queries
+          bool force_immediate_db_change : 1 = false;
 
           friend class neam::enfield::database<DatabaseConf>;
           friend class neam::enfield::entity<DatabaseConf>;
 
-          // allow the deallocator to call the destructor
-          template<typename DBC>
-          friend void DatabaseConf::attached_object_allocator::deallocate(type_t, base<DBC>&);
 
           template<typename DBC, typename AttachedObjectClass, typename FC>
           friend class base_tpl;

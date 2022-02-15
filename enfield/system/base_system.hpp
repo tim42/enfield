@@ -49,8 +49,8 @@ namespace neam
     {
       public:
         virtual std::string get_system_name() const = 0;
-        base_system(database<DatabaseConf>& _db, type_t _system_id, bool _has_barrier_before)
-          : db(_db), system_id(_system_id), has_barrier_before(_has_barrier_before)
+        base_system(database<DatabaseConf>& _db, type_t _system_id)
+          : db(_db), system_id(_system_id)
         {
         }
         virtual ~base_system() = default;
@@ -66,9 +66,19 @@ namespace neam
         /// after every entity has been updated
         virtual void end() {}
 
+        /// \brief If false, iterate over all the entities and run on those that match
+        ///        If true, iterate over one of the matched attached-objects (the one with the smallest count)
+        /// \note Only set this to true if you know that you only have a small proportion (< 20%) of entities matching.
+        /// \warning setting this to true will yield faster execution time, but might miss recently added attached-objects (delayed ones)
+        ///          and *will* skip all transient ones.
+        /// \note when only matching concepts, setting this to true should (most of the time) only yield better perfs.
+        ///
+        /// \note some system execution modes might not respect this flag
+        bool should_use_attached_object_db = false;
+
       private:
         using entity_data_t = typename entity<DatabaseConf>::data_t;
-        using component_mask_t = typename entity<DatabaseConf>::component_mask_t;
+        using attached_object_mask_t = attached_object::mask_t<DatabaseConf>;
 
 
         /// \brief Run if the entity has the required attached objects
@@ -79,18 +89,33 @@ namespace neam
         }
 
         virtual void run(entity_data_t& data) = 0;
+        virtual void init_system_for_run() = 0;
 
         template<typename AO>
         using id_t = type_id<AO, typename DatabaseConf::attached_object_type>;
 
         template<typename... AttachedObjects>
-        struct mask_helper_t
+        struct helper_t
         {
-          static component_mask_t make_mask()
+          static attached_object_mask_t make_mask()
           {
-            component_mask_t mask;
+            attached_object_mask_t mask;
             (mask.set(id_t<AttachedObjects>::id), ...);
             return mask;
+          }
+          static type_t get_min_entry_count(const database<DatabaseConf>& db)
+          {
+            type_t attached_object_id = ~0u;
+            size_t min_count = ~0ul;
+            (
+              ((db.attached_object_db[id_t<AttachedObjects>::id].db.size() < min_count) ?
+               (
+                 min_count = db.attached_object_db[id_t<AttachedObjects>::id].db.size(),
+                 attached_object_id = id_t<AttachedObjects>::id,
+                 0
+               ) : 0), ...
+            );
+            return attached_object_id;
           }
         };
 
@@ -98,14 +123,22 @@ namespace neam
         template<typename AttachedObjectsList>
         void set_mask()
         {
-          using helper = typename ct::list::extract<AttachedObjectsList>::template as<mask_helper_t>;
+          using helper = typename ct::list::extract<AttachedObjectsList>::template as<helper_t>;
           mask = helper::make_mask();
         }
 
-        component_mask_t mask;
+        template<typename AttachedObjectsList>
+        void compute_fewest_attached_object_id()
+        {
+          using helper = typename ct::list::extract<AttachedObjectsList>::template as<helper_t>;
+          smallest_attached_object_db = helper::get_min_entry_count(db);
+        }
+
+      private:
+        attached_object_mask_t mask;
 
         const type_t system_id;
-        const bool has_barrier_before;
+        type_t smallest_attached_object_db = ~type_t(0);
 
         template<typename DBC, typename SystemClass> friend class system;
         friend class system_manager<DatabaseConf>;

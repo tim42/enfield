@@ -197,9 +197,9 @@ int main(int, char**)
 
 
   // perform a query on the db: it will return every printable whose entity has either a truc or a truc2 component
-  const auto query = db.query<printable>().filter<truc2, truc>(neam::enfield::query_condition::any);
+//   const auto query = db.query<printable>().filter<truc2, truc>(neam::enfield::query_condition::any);
 
-  neam::cr::out().log("{}", query.result.size());
+//   neam::cr::out().log("{}", query.result.size());
   neam::cr::out().log("has<truc2>: {}", entity.has<truc2>());
   neam::cr::out().log("has<printable>: {}", entity.has<printable>());
 

@@ -18,7 +18,7 @@
 #include "auto_updatable.hpp"
 #include "components.hpp"
 
-constexpr size_t frame_count = 10000;
+constexpr size_t frame_count = 1000/*0*/;
 constexpr size_t thread_count = 7;
 constexpr size_t entity_count = 16384 * 2 * (thread_count + 1);
 
@@ -34,7 +34,6 @@ void init_entities(neam::enfield::database<sample::db_conf> &db, std::list<neam:
 //     if (i % 2 == 0)
       entity.add<sample::comp_2>();
   }
-  db.optimize();
 }
 
 int main(int, char **)
@@ -45,7 +44,12 @@ int main(int, char **)
   neam::threading::task_manager tm;
   {
     neam::threading::task_group_dependency_tree tgd;
-    tgd.add_task_group("the-one-group"_rid, "the-one-group");
+    tgd.add_task_group("cleanup-group"_rid, "cleanup-group");
+    tgd.add_task_group("system-group"_rid, "system-group");
+
+    // system depends on cleanup
+    tgd.add_dependency("system-group"_rid, "cleanup-group"_rid);
+
     auto tree = tgd.compile_tree();
 //     tree.print_debug();
 
@@ -67,31 +71,52 @@ int main(int, char **)
 
   // create a bunch of entities
   init_entities(db, entity_list);
+  db.optimize(tm);
 
   neam::cr::out().log("running a bit the systems [{} frames]...", frame_count);
   neam::cr::out().log("Using {} threads...", thread_count + 1);
 
-
   std::atomic<unsigned> frame_index = 0;
-  tm.set_start_task_group_callback("the-one-group"_rid, [&sysmgr, &tm, &db, &frame_index]()
+  tm.set_start_task_group_callback("cleanup-group"_rid, [&sysmgr, &tm, &db, &frame_index]()
   {
     TRACY_SCOPED_ZONE;
-    sysmgr.push_tasks(db, tm, "the-one-group"_rid, true)
-//     sysmgr.push_tasks(db, tm, "the-one-group"_rid, false)
+    db.apply_component_db_changes();
+    db.optimize(tm, tm.get_group_id("cleanup-group"_rid));
+  });
+
+  tm.set_start_task_group_callback("system-group"_rid, [&sysmgr, &tm, &db, &frame_index]()
+  {
+    TRACY_SCOPED_ZONE;
+    sysmgr.push_tasks(db, tm, "system-group"_rid, true)
+//     sysmgr.push_tasks(db, tm, "system-group"_rid, false)
     .then([&]()
     {
+      TRACY_SCOPED_ZONE;
+
       ++frame_index;
 
+      size_t sz = 0;
+      db.for_each([&sz](sample::comp_1b&, sample::comp_3& ) { ++sz; });
       static unsigned old_pct = 0;
       unsigned pct = (frame_index * 100 / frame_count);
       if (pct % 10 == 0 && old_pct != pct)
       {
         old_pct = pct;
+
         neam::cr::out().debug(" progress: {}%", pct);
       }
     });
-  });
 
+    tm.get_task("system-group"_rid, [&tm, &db]()
+    {
+      // while the system runs, run some queries / for-each stuff:
+//       sz = db.query<sample::comp_1b>().filter<sample::comp_3>().result.size();
+      db.for_each([](sample::comp_1b& , sample::comp_3& ) {});
+
+      // just to test this:
+      tm.run_tasks(std::chrono::microseconds(1000));
+    });
+  });
 
   TRACY_NAME_THREAD("Worker");
   neam::cr::chrono chr;

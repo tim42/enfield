@@ -78,7 +78,7 @@ namespace neam
             // default configuration: (must be static constexpr)
 
             /// \brief Define general access rights
-            static constexpr attached_object_access access = attached_object_access::all;
+            static constexpr attached_object_access access = attached_object_access::all_no_automanaged;
           };
 
           /// \brief Specify the rights of OtherClassId over ClassId.
@@ -95,7 +95,14 @@ namespace neam
           using attached_object_allocator = default_attached_object_allocator;
 
           /// \brief The maximum number of components
-          static constexpr uint64_t max_attached_objects_types = 2 * 64;
+          static constexpr uint64_t max_attached_objects_types = 4 * 64;
+
+          /// \brief Completly disallow the use of attached_object_db.
+          /// Remove usage of queries.
+          /// for-each is a bit slower (overhead) when the matching entity count is low ( < 20% of the database)
+          /// Attached Object creation and suppression and optimize() is much much faster
+          /// If your data is very dynamic, should be false.
+          static constexpr bool use_attached_object_db = false;
       };
       template<>
       struct eccs::class_rights<eccs::concept_class::id>
@@ -131,7 +138,7 @@ namespace neam
             // default configuration: (must be static constexpr)
 
             /// \brief Define general access rights
-            static constexpr attached_object_access access = attached_object_access::all;
+            static constexpr attached_object_access access = attached_object_access::all_no_automanaged;
           };
 
           /// \brief Specify the rights of OtherClassId over ClassId.
@@ -148,7 +155,14 @@ namespace neam
           using attached_object_allocator = default_attached_object_allocator;
 
           /// \brief The maximum number of components
-          static constexpr uint64_t max_attached_objects_types = 2 * 64;
+          static constexpr uint64_t max_attached_objects_types = 4 * 64;
+
+          /// \brief Completly disallow the use of attached_object_db.
+          /// Remove usage of queries.
+          /// for-each is a bit slower (overhead) when the matching entity count is low ( < 20% of the database)
+          /// Attached Object creation and suppression and optimize() is much much faster
+          /// If your data is very dynamic, should be false.
+          static constexpr bool use_attached_object_db = false;
       };
       template<>
       struct conservative_eccs::class_rights<conservative_eccs::concept_class::id>
@@ -186,7 +200,7 @@ namespace neam
             // default configuration: (must be static constexpr)
 
             /// \brief Define general access rights
-            static constexpr attached_object_access access = attached_object_access::all;
+            static constexpr attached_object_access access = attached_object_access::all_no_automanaged;
           };
 
           /// \brief Specify the rights of OtherClassId over ClassId.
@@ -203,7 +217,14 @@ namespace neam
           using attached_object_allocator = default_attached_object_allocator;
 
           /// \brief The maximum number of components
-          static constexpr uint64_t max_attached_objects_types = 2 * 64;
+          static constexpr uint64_t max_attached_objects_types = 4 * 64;
+
+          /// \brief Completly disallow the use of attached_object_db.
+          /// Remove usage of queries.
+          /// for-each is a bit slower (overhead) when the matching entity count is low ( < 20% of the database)
+          /// Attached Object creation and suppression and optimize() is much much faster
+          /// If your data is very dynamic, should be false.
+          static constexpr bool use_attached_object_db = false;
       };
     } // namespace db_conf
   } // namespace enfield

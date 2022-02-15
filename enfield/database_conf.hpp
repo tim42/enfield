@@ -65,7 +65,7 @@ namespace neam
       automanaged =         1 << 5,
 
       /// \brief grant all rights to other attached objects
-      ao_all = ao_requireable | ao_removable | ao_unsafe_getable | automanaged,
+      ao_all = ao_requireable | ao_removable | ao_unsafe_getable,
       /// \brief grant all "safe" rights to other attached objects
       ao_all_safe = ao_requireable | ao_removable,
 
@@ -81,7 +81,12 @@ namespace neam
       user_all = user_creatable | user_getable | user_removable,
 
       /// \brief Grant all rights to everybody
-      all = ao_all | user_all,
+      all = ao_all | user_all | automanaged,
+      all_no_automanaged = ao_all | user_all,
+
+      /// \brief Grant all safe rights to everybody
+      all_safe = ao_all_safe | user_all | automanaged,
+      all_safe_no_automanaged = ao_all_safe | user_all,
     };
     inline constexpr attached_object_access operator | (attached_object_access a, attached_object_access b) { return static_cast<attached_object_access>((int)a | (int)b); }
     inline constexpr attached_object_access operator & (attached_object_access a, attached_object_access b) { return static_cast<attached_object_access>((int)a & (int)b); }
@@ -91,32 +96,22 @@ namespace neam
 
     /// \brief The default enfield allocator for attached objects (simply new/delete)
     /// All allocators should respect the same conditions:
-    ///   - if allocate returns, it's a valid and constructed object. Otherwise: exception.
-    ///   - deallocate only takes valid objects, call the destructor and free the memory. no exception permitted.
-    /// It is guaranteed that every object with the same type id are the same final type,
-    /// hence every instance do have the same size
+    ///   - if allocate returns, it's a valid
+    /// It is guaranteed that every object with the same type id have the same size/alignment,
     struct default_attached_object_allocator
     {
-      /// \brief Allocate a new object, and call its constructor.
-      template<typename Object, typename... Args>
-      static Object& allocate(type_t type_id, Args&& ... args);
+      /// \brief Allocate a new object
+      static void* allocate(type_t /*type_id*/, size_t size, size_t align)
+      {
+        return operator new(size, std::align_val_t(align));
+      }
 
-      /// \brief Destruct and deallocate the object
-      template<typename DatabaseConf>
-      static void deallocate(type_t type_id, attached_object::base<DatabaseConf>& obj);
+      /// \brief Deallocate an object
+      static void deallocate(type_t /*type_id*/, void* ptr)
+      {
+        operator delete(ptr);
+      }
     };
-
-    template<typename Object, typename... Args>
-    Object& default_attached_object_allocator::allocate(type_t, Args&& ... args)
-    {
-      return *new Object(std::forward<Args>(args)...);
-    }
-
-    template<typename DatabaseConf>
-    void default_attached_object_allocator::deallocate(type_t, attached_object::base<DatabaseConf>& obj)
-    {
-      delete &obj;
-    }
 
     /// \brief Check that the corresponding type satisfy the database requirements
     template<typename DatabaseConf, typename AttachedObject>

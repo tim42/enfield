@@ -45,7 +45,33 @@ namespace sample
       {
       }
 
-      int data = 0;
+      uint64_t data = reinterpret_cast<uint64_t>(this);
+  };
+
+  class comp_1b : public neam::enfield::component<sample::db_conf, comp_1b>
+  {
+    public:
+      comp_1b(param_t p) : component_t(p)
+      {
+      }
+  };
+
+  class comp_3 : public neam::enfield::component<sample::db_conf, comp_3>,
+    private auto_updatable::concept_provider<comp_3>
+  {
+    public:
+      comp_3(param_t p)
+        : component_t(p),
+          auto_updatable_t(*this)
+      {
+      }
+
+    private:
+      void update()
+      {
+      }
+
+      friend auto_updatable_t;
   };
 
   /// \brief Deadly stupid and simple component that is auto-updatable
@@ -55,18 +81,31 @@ namespace sample
     public:
       comp_2(param_t p)
         : component_t(p),
-          auto_updatable_t(*this),
-          comp(require<comp_1>())
+          auto_updatable_t(*this)
       {
       }
 
     private:
       void update()
       {
-        comp.data += 10;
+        // some bit of math:
+        comp.data += comp.data * comp.data | 5;
+
+        if ((comp.data & (1 << 23)))
+        {
+          if (is_required<comp_1b>())
+            unrequire<comp_1b>();
+          else if (!is_required<comp_1b>())
+            require<comp_1b>();
+        }
+
+        if (is_required<comp_3>())
+          unrequire<comp_3>();
+        else
+          require<comp_3>();
       }
 
-      comp_1 &comp;
+      comp_1 &comp = require<comp_1>();
       friend auto_updatable_t;
   };
 } // namespace sample

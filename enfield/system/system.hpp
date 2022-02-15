@@ -69,7 +69,7 @@ namespace neam
       protected:
         /// \brief constructor
         system(database<DatabaseConf>& _db)
-          : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id, false)
+          : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id)
         {
           // setup the mask
           using list = ct::list::for_each<typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list, rm_rcv>;
@@ -112,6 +112,12 @@ namespace neam
           using list = ct::list::for_each<typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list, rm_rcv>;
           using helper = typename ct::list::extract<list>::template as<run_helper_t>;
           helper::run(*static_cast<SystemClass*>(this), data);
+        }
+
+        void init_system_for_run() final override
+        {
+          using list = ct::list::for_each<typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list, rm_rcv>;
+          this->template compute_fewest_attached_object_id<list>();
         }
     };
   } // namespace enfield

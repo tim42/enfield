@@ -143,7 +143,10 @@ namespace neam::enfield
 
           // call begin() on all the systems:
           for (auto& it : systems)
+          {
+            it->init_system_for_run();
             it->begin();
+          }
 
           // compute the number of task to dispatch, but limit that to a max number
           // to avoid saturating the task system
@@ -180,6 +183,7 @@ namespace neam::enfield
         // add the task for the next system
         if (system_index < systems.size())
         {
+          systems[system_index]->init_system_for_run();
           systems[system_index]->begin();
 
           // create the final sync task:
@@ -190,7 +194,9 @@ namespace neam::enfield
 
           final_task.add_dependency_to(*next_sync_wr);
 
-          const uint32_t entity_count = db.get_entity_count();
+          const uint32_t entity_count = DatabaseConf::use_attached_object_db && systems[system_index]->should_use_attached_object_db
+                                        ? db.get_attached_object_count(systems[system_index]->smallest_attached_object_db)
+                                        : db.get_entity_count();
           // create the worker tasks:
           uint32_t dispatch_count = entity_count / entity_per_task;
           if (dispatch_count > max_task_count)
@@ -211,18 +217,44 @@ namespace neam::enfield
         const uint32_t base_index = index.fetch_add(entity_per_task);
 
         // for each entities, run all systems:
-        for (uint32_t i = 0; i < entity_per_task && base_index + i < db.get_entity_count(); ++i)
+        base_system<DatabaseConf>& system = *systems[system_index];
+        if (!DatabaseConf::use_attached_object_db || system.should_use_attached_object_db == false)
         {
-          entity_data_t& data = db.get_entity(base_index + i);
+          // iterate over all entities:
+          for (uint32_t i = 0; i < entity_per_task && base_index + i < db.get_entity_count(); ++i)
+          {
+            entity_data_t& data = db.get_entity(base_index + i);
 
-          systems[system_index]->try_run(data);
+            system.try_run(data);
+          }
+
+          // not completed yet: we need more tasks:
+          if (index < db.get_entity_count())
+          {
+            threading::task_wrapper task = tm.get_task(next_sync.get_task_group(), [this, &db, &tm, &next_sync]() { run_sync_exec(db, tm, next_sync); });
+            next_sync.add_dependency_to(*task);
+          }
         }
-
-        // not completed yet: we need more tasks:
-        if (index < db.get_entity_count())
+        else // should_use_attached_object_db == true
         {
-          threading::task_wrapper task = tm.get_task(next_sync.get_task_group(), [this, &db, &tm, &next_sync]() { run_sync_exec(db, tm, next_sync); });
-          next_sync.add_dependency_to(*task);
+          if constexpr (DatabaseConf::use_attached_object_db) // only there to delete the code
+          {
+            // iterate over all entities:
+            for (uint32_t i = 0; i < entity_per_task && base_index + i < db.get_attached_object_count(system.smallest_attached_object_db); ++i)
+            {
+              entity_data_t* data = db.get_attached_object_owner(base_index + i, system.smallest_attached_object_db);
+              if (!data) continue;
+
+              system.try_run(*data);
+            }
+
+            // not completed yet: we need more tasks:
+            if (index < db.get_attached_object_count(system.smallest_attached_object_db))
+            {
+              threading::task_wrapper task = tm.get_task(next_sync.get_task_group(), [this, &db, &tm, &next_sync]() { run_sync_exec(db, tm, next_sync); });
+              next_sync.add_dependency_to(*task);
+            }
+          }
         }
       }
 

@@ -69,7 +69,10 @@ namespace sample
       class system : public neam::enfield::system<db_conf, system>
       {
         public:
-          system(neam::enfield::database<db_conf> &_db) : neam::enfield::system<db_conf, system>(_db) {}
+          system(neam::enfield::database<db_conf> &_db) : neam::enfield::system<db_conf, system>(_db)
+          {
+            should_use_attached_object_db = true;
+          }
 
         private:
           virtual void begin() final {}
@@ -92,8 +95,12 @@ namespace sample
       /// \brief Called by the system to update every auto_updatable attached objects
       void update_all()
       {
-        for (size_t i = 0; i < get_concept_providers_count(); ++i)
-          get_concept_provider(i)._do_update();
+        for_each_concept_provider([](auto& it)
+        {
+          it._do_update();
+        });
+//         for (size_t i = 0; i < get_concept_providers_count(); ++i)
+//           get_concept_provider(i)._do_update();
       }
 
       // Mandatory
