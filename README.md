@@ -1,12 +1,12 @@
 
 
-Enfield: C++14 EWS `[Entity Whatever System]` thingy.
+Enfield: C++ EWS `[Entity Whatever System]` thingy.
 
 This includes ECS `[entity component system]`, ECCS/E2CS/EC²S `[entity component concept system]`, ...
 
 ---
 
-This project is under development, and can't be used in any kind of project.
+This project is under development, and might not be usable in most projects.
 Yet.
 
 ---
@@ -14,18 +14,16 @@ Yet.
 
 # important notes
 
-This is **not** a "normal" ECS system, but something more C++ friendly and a bit more generic. Enfield is an E*S with a twist:
- - Entity: Lightweight object that just contains a pointer
- - Components: are where the entity's data is and they should only contain the logic related to that data and may not depends on other components (or as little as possible).
- - Concepts: components are just data/small logic but can implement a concept. Concepts are a kind of interface toward many components implementing the concept.
-   Bounding volumes, input receivers, transforms, ... are good candidates to be concepts and not components (components would be the data-provider/data-receiver for those kind of concepts)
-   Usualy concepts does not hold much data, only logic and are mostly manipulated by systems
- - Systems: Manipulate large chunk of entities by using concepts or components.
+Enfield makes a trade-off of usability, speed and adaptability. The main interesting specificity is something named "concepts".
 
-There is no flags (you can't flag an entity, a component or a concept: I don't see yet why one should have flags, but there's nothing that stops you from adding flags (see the configuration section below)).
+Enfield operates on entities and what is called "attached-objects", which are objects that can be attached to an entity (like components or concepts).
+Rules governing the behavior of a category of such attached objects is governed by the database configuration (see `database_conf_impl.hpp` and the section below). Configuration allows for specific behaviors, most of which are enforced at compile-time.
 
-Enfield documentation extensively use the term _attached object_. An _attached object_ is anything that can be attached to an entity like components or concepts.
-Likewise, an _attached object class_ is a category of attached objects that follow the same pattern. Component is one class of _attached object_, as concept is another one.
+The current existing categories of attached-objects are:
+ - **components**: Like normal ECS components, mainly holds data. They can be added and removed, and can have dependency to other components.
+ - **concepts**: A more generic view on components. Cannot be added or removed (they are automatically added and removed as components implementing them are added or removed), but are used to represent and abstract a higher level... concept. Such concepts can be "serializable", "updatable", "renderable", ... They bridge the gap between systems and components, avoiding making system too specific and working only with a set of known components (which is the problem almost all current ECS implementations have).
+
+Systems are also presents and have multiple modes of multi-threading support, depending on what is required. Support for the ntools' task_manager is also present.
 
 
 Guarantees:
@@ -33,15 +31,12 @@ Guarantees:
  - Components dependency: (both for concepts and components): A component that has not been requested by the user will be destroyed when the last concept/component
    requiring it is removed.
  - Components dependency: dependency cycles throws an exception or (if in super-release) a hard-segfault over a poisoned pointer.
- - No interfaces / pure virtual methods where it is possible to do it: Enfield relies mostly on template / CRTP / specialization to work.
  - Concepts can implement other concepts
  - Components must be constructible with respect of the enfield construction contract
- - Iterating over components or concepts of a given type is O(1) and cache efficient.
+ - Iterating over components or concepts of a given type is O(1) (for the next component/entity) and cache efficient.
+   - Iterating over entities that matches a set of component is less cache friendly and a bit less efficient (worst case is trying to match entities with two components where no entities have both components but entities with only one of them are in very big quantity)
  - Fully modifiable (via the db-configuration pattern) with strong compile-time guarantees (access rights, ...).
-   see `default_database_conf` in `database.hpp`. See also the section below:
-
-Good practices:
- - There should be no direct dynamic allocation in a component or a concept. (a leak in either of those and the global memory consumption will increase quite rapidly)
+   see `database_conf_impl.hpp`. See also the section below:
 
 # configuration
 
@@ -103,6 +98,3 @@ make
 ```
 
 ---
-
-
-Made w/ <3 by Timothée Feuillet.
