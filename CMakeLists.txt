@@ -2,7 +2,7 @@
 ## CMAKE file for neam/...
 ##
 
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.21)
 
 project(enfield VERSION 0.0.1)
 

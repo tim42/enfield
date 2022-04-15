@@ -69,7 +69,7 @@ namespace neam
       protected:
         /// \brief constructor
         system(database<DatabaseConf>& _db)
-          : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id)
+          : base_system<DatabaseConf>(_db, type_id<SystemClass, typename DatabaseConf::system_type>::id())
         {
           // setup the mask
           using list = ct::list::for_each<typename ct::function_traits<decltype(&SystemClass::on_entity)>::arg_list, rm_rcv>;

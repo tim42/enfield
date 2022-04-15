@@ -39,6 +39,10 @@
 
 #include "enfield_types.hpp"
 #include "database_conf.hpp"
+#include "type_registry.hpp"
+#include "attached_object_utility.hpp"
+#include "query.hpp"
+
 #include <ntools/memory_pool.hpp>
 #include <ntools/function.hpp>
 #include <ntools/debug/assert.hpp>
@@ -49,26 +53,6 @@ namespace neam
 {
   namespace enfield
   {
-    template<typename DatabaseConf> class system_manager;
-
-    namespace attached_object
-    {
-      template<typename DBC, typename AttachedObjectClass, typename FinalClass> class base_tpl;
-    } // namespace attached_object
-
-    /// \brief Different possibilities for filtering queries
-    enum class query_condition
-    {
-      each,
-      any,
-    };
-
-    enum class for_each
-    {
-      next, // conitnue (default if the function returns void)
-      stop, // break the for-each loop
-    };
-
     /// \brief Where components are stored
     /// \warning The database isn't thread safe yet, except the run_systems() call
     /// \note The way the database perform allocations is really bad and should be improved
@@ -79,8 +63,10 @@ namespace neam
       public:
         using conf_t = DatabaseConf;
         using entity_t = entity<DatabaseConf>;
-        using attached_object_mask_t = attached_object::mask_t<DatabaseConf>;
+//        using attached_object_mask_t = inline_mask<DatabaseConf>;
         using base_t = attached_object::base<DatabaseConf>;
+        template<typename... Types>
+        using attached_object_utility_t = attached_object_utility<DatabaseConf, Types...>;
 
       private: // check the validity of the compile-time conf
         static_assert(DatabaseConf::max_attached_objects_types % (sizeof(uint64_t) * 8) == 0, "database's Conf::max_attached_objects_types property must be a multiple of uint64_t");
@@ -88,84 +74,6 @@ namespace neam
         using rm_rcv = typename std::remove_reference<typename std::remove_cv<Type>::type>::type;
 
         using entity_data_t = typename entity_t::data_t;
-
-        template<typename... AttachedObjects>
-        struct attached_object_utility
-        {
-          static constexpr void check()
-          {
-            (static_assert_check_attached_object<DatabaseConf, AttachedObjects>(), ...);
-            (static_assert_can<DatabaseConf, AttachedObjects, attached_object_access::user_getable>(), ...);
-          }
-
-          static type_t get_min_entry_count(const database& db)
-          {
-            type_t attached_object_id = ~0u;
-            size_t min_count = ~0ul;
-            (
-              ((db.attached_object_db[id_t<AttachedObjects>::id].db.size() < min_count) ?
-               (
-                 min_count = db.attached_object_db[id_t<AttachedObjects>::id].db.size(),
-                 attached_object_id = id_t<AttachedObjects>::id,
-                 0
-               ) : 0), ...
-            );
-            return attached_object_id;
-          }
-
-          static attached_object_mask_t make_mask()
-          {
-            attached_object_mask_t mask;
-            (mask.set(id_t<AttachedObjects>::id), ...);
-            return mask;
-          }
-
-          template<typename Func, typename... Params>
-          static auto do_call_func(const Func& fnc, Params*... objs)
-          {
-            // If the entity is being constructed and for-each is called at that time,
-            // it will return null pointers while still marking the entity as having the component
-            // so we simply skip the call if that's the case
-            if (((objs != nullptr) && ...))
-              return fnc(*objs...);
-
-            using ret_type = std::invoke_result_t<Func, AttachedObjects& ...>;
-            if constexpr(std::is_same_v<enfield::for_each, ret_type>)
-              return for_each::next;
-            else
-              return;
-          }
-
-          template<typename Func>
-          static for_each call(const Func& fnc, database& db, entity_data_t& data)
-          {
-            using ret_type = std::invoke_result_t<Func, AttachedObjects& ...>;
-            if constexpr(std::is_same_v<enfield::for_each, ret_type>)
-            {
-              return do_call_func(fnc, db.entity_get<AttachedObjects>(data)...);
-            }
-            else
-            {
-              do_call_func(fnc, db.entity_get<AttachedObjects>(data)...);
-              return for_each::next;
-            }
-          }
-
-          template<typename Func>
-          static for_each call(const Func& fnc, const database& db, const entity_data_t& data)
-          {
-            using ret_type = std::invoke_result_t<Func, const AttachedObjects& ...>;
-            if constexpr(std::is_same_v<enfield::for_each, ret_type>)
-            {
-              return do_call_func(fnc, db.entity_get<AttachedObjects>(data)...);
-            }
-            else
-            {
-              do_call_func(fnc, db.entity_get<AttachedObjects>(data)...);
-              return for_each::next;
-            }
-          }
-        };
 
         struct attached_object_db_t
         {
@@ -180,77 +88,18 @@ namespace neam
         database& operator = (const database&) = delete;
 
       public:
-        database() = default;
-
-        /// \brief A query in the DB
-        template<typename AttachedObject>
-        class query_t
+        database()
         {
-          public:
-            /// \brief The result of the query
-            const std::deque<AttachedObject*> result = std::deque<AttachedObject*>();
-
-            /// \brief Filter the result of the DB
-            template<typename... FilterAttachedObjects>
-            query_t filter(query_condition condition = query_condition::each) const
-            {
-              TRACY_SCOPED_ZONE;
-              (static_assert_check_attached_object<DatabaseConf, FilterAttachedObjects>(), ...);
-              (static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::user_getable>(), ...);
-              std::deque<AttachedObject*> next_result;
-
-              for (auto it : result)
-              {
-                if (it->authorized_destruction)
-                  continue;
-
-                bool ok = (condition == query_condition::each);
-                if (condition == query_condition::any)
-                  ok = ((it->owner.template has<FilterAttachedObjects>()) || ... || ok);
-                else if (condition == query_condition::each)
-                  ok = ((it->owner.template has<FilterAttachedObjects>()) && ...) && ok;
-
-                if (ok)
-                  next_result.push_back(it);
-              }
-
-              return query_t {next_result};
-            }
-
-            /// \brief Return both the passing [1] and the failing [0] AttachedObjects
-            template<typename... FilterAttachedObjects>
-            std::array<query_t, 2> filter_both(query_condition condition = query_condition::each) const
-            {
-              TRACY_SCOPED_ZONE;
-              (static_assert_check_attached_object<DatabaseConf, FilterAttachedObjects>(), ...);
-              (static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::user_getable>(), ...);
-
-              std::deque<AttachedObject*> next_result_success;
-              std::deque<AttachedObject*> next_result_fail;
-
-              next_result_success.reserve(result.size());
-              next_result_fail.reserve(result.size());
-
-              for (auto it : result)
-              {
-                if (it->pending_destruction)
-                  continue;
-
-                bool ok = (condition == query_condition::each);
-                if (condition == query_condition::any)
-                  ok = ((it->owner->template has<FilterAttachedObjects>()) || ... || ok);
-                else if (condition == query_condition::each)
-                  ok = ((it->owner->template has<FilterAttachedObjects>()) && ... && ok);
-
-                if (ok)
-                  next_result_success.push_back(it);
-                else
-                  next_result_fail.push_back(it);
-              }
-
-              return {query_t{next_result_fail}, query_t{next_result_success}};
-            }
-        };
+          cr::out().debug("number of registered types: {}", type_registry<DatabaseConf>::allocator_info().size());
+          // go over the registered types to setup the allocator:
+          auto& allocator_info = type_registry<DatabaseConf>::allocator_info();
+          auto& debug_info = type_registry<DatabaseConf>::debug_info();
+          for (size_t i = 0; i < allocator_info.size(); ++i)
+          {
+            cr::out().debug("  {}: size of {} bytes, aligned on {} bytes", debug_info[i].type_name, allocator_info[i].size, allocator_info[i].alignment);
+            allocator.init_for_type(allocator_info[i].id, allocator_info[i].size, allocator_info[i].alignment);
+          }
+        }
 
       public:
         ~database()
@@ -266,8 +115,6 @@ namespace neam
         /// \brief Create a new entity
         entity_t create_entity()
         {
-          std::lock_guard<spinlock> _lg(entity_data_pool_lock);
-
           entity_data_t* data = entity_data_pool.allocate();
           new (data) entity_data_t(*this); // construct
 
@@ -277,6 +124,7 @@ namespace neam
 #endif
 
           // for systems
+          std::lock_guard<spinlock> _lg(entity_list_lock);
           data->index = entity_list.size();
           entity_list.push_back(data);
 
@@ -296,6 +144,7 @@ namespace neam
           }
           else
           {
+            check::debug::n_assert(id < DatabaseConf::max_attached_objects_types, "get_attached_object_count: type-id is too big (id: {}, max: {})", id, DatabaseConf::max_attached_objects_types);
             return attached_object_db[id].db.size();
           }
         }
@@ -330,7 +179,7 @@ namespace neam
         /// \note Calling apply_component_db_changes is necessary at least once a frame
         /// \note Might miss attached objects added before apply_component_db_changes
         template<typename AttachedObject>
-        query_t<AttachedObject> query() const
+        query_t<DatabaseConf, AttachedObject> query() const
         {
           if constexpr(!DatabaseConf::use_attached_object_db)
           {
@@ -345,7 +194,7 @@ namespace neam
 
           const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
           if (attached_object_id > DatabaseConf::max_attached_objects_types)
-            return query_t<AttachedObject>();
+            return {};
 
           std::deque<AttachedObject*> ret;
           for (uint32_t i = 0; i < attached_object_db[attached_object_id].db.size(); ++i)
@@ -355,7 +204,7 @@ namespace neam
               ret.push_back(static_cast<AttachedObject*>(ptr));
           }
 
-          return query_t<AttachedObject> {ret};
+          return {ret};
         }
 
         /// \brief Optimize the DB for cache coherency
@@ -367,7 +216,7 @@ namespace neam
           TRACY_SCOPED_ZONE;
           if (entity_deletion_count.load(std::memory_order_acquire) > k_deletion_count_to_optimize)
           {
-            std::lock_guard<spinlock> _lg(entity_data_pool_lock);
+            std::lock_guard<spinlock> _lg(entity_list_lock);
             entity_deletion_count.store(0, std::memory_order_release);
             std::sort(entity_list.begin(), entity_list.end());
             for (uint32_t i = 0; i < entity_list.size(); ++i)
@@ -401,7 +250,7 @@ namespace neam
             auto sort = tm.get_task(group_id, [this]
             {
               TRACY_SCOPED_ZONE;
-              std::lock_guard<spinlock> _lg(entity_data_pool_lock);
+              std::lock_guard<spinlock> _lg(entity_list_lock);
               entity_deletion_count.store(0, std::memory_order_release);
               std::sort(entity_list.begin(), entity_list.end());
               for (uint32_t i = 0; i < entity_list.size(); ++i)
@@ -437,7 +286,6 @@ namespace neam
         /// \warning It must be called often (something like at the beginning of frames)
         /// \warning Calling this invalidates existing queries
         /// \note inherently single-threaded
-        /// \fixme 
         void apply_component_db_changes()
         {
           TRACY_SCOPED_ZONE;
@@ -460,7 +308,7 @@ namespace neam
             {
               if constexpr (!DatabaseConf::use_attached_object_db)
               {
-                DatabaseConf::attached_object_allocator::deallocate(base->object_type_id, base);
+                allocator.deallocate(base->fully_transient_attached_object, base->object_type_id, base);
               }
               else
               {
@@ -508,7 +356,7 @@ namespace neam
         template<typename AttachedObjectsList, typename Function>
         void for_each_list(const Function& func)
         {
-          using utility = typename ct::list::extract<AttachedObjectsList>::template as<attached_object_utility>;
+          using utility = typename ct::list::extract<AttachedObjectsList>::template as<attached_object_utility_t>;
 
           utility::check();
 
@@ -516,7 +364,7 @@ namespace neam
           const type_t attached_object_id = utility::get_min_entry_count(*this);
 
           // generates the mask
-          const attached_object_mask_t mask = utility::make_mask();
+          const inline_mask<DatabaseConf> mask = utility::make_mask();
 
           // for each !
           if constexpr (DatabaseConf::use_attached_object_db)
@@ -545,7 +393,7 @@ namespace neam
         template<typename AttachedObjectsList, typename Function>
         void for_each_list(const Function& func) const
         {
-          using utility = typename ct::list::extract<AttachedObjectsList>::template as<attached_object_utility>;
+          using utility = typename ct::list::extract<AttachedObjectsList>::template as<attached_object_utility_t>;
 
           utility::check();
 
@@ -553,7 +401,7 @@ namespace neam
           const type_t attached_object_id = utility::get_min_entry_count(*this);
 
           // generates the mask
-          const attached_object_mask_t mask = utility::make_mask();
+          const inline_mask<DatabaseConf> mask = utility::make_mask();
 
           // for each !
           if constexpr(DatabaseConf::use_attached_object_db)
@@ -682,15 +530,15 @@ namespace neam
           for (auto& it : to_remove)
             remove_ao_user(data, *it);
 
-          // starting this point we need the lock on the entity data pool/list
-          std::lock_guard<spinlock> _lg(entity_data_pool_lock);
 
           // remove the entity from the list
-          check::debug::n_assert(entity_list[data.index] == &data, "Trying to remove and entity from a different DB");
-          entity_list.back()->index = data.index;
-          entity_list[data.index] = entity_list.back();
-          entity_list.pop_back();
-
+          {
+            std::lock_guard<spinlock> _lg(entity_list_lock);
+            check::debug::n_assert(entity_list[data.index] == &data, "Trying to remove and entity from a different DB");
+            entity_list.back()->index = data.index;
+            entity_list[data.index] = entity_list.back();
+            entity_list.pop_back();
+          }
           entity_deletion_count.fetch_add(1, std::memory_order_release);
 
           // This error mostly tells you that you have dependency cycles in your attached objects.
@@ -718,7 +566,7 @@ namespace neam
         template<typename AttachedObject, typename... DataProvider>
         AttachedObject& add_ao_dep(entity_data_t& data, attached_object::creation_flags flags, base_t& requester, DataProvider&& ... provider)
         {
-          const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id();
 
           base_t* bptr;
           if (data.has(id))
@@ -744,7 +592,10 @@ namespace neam
                                    attached_object::creation_flags flags,
                                    DataProvider&& ... provider)
         {
-          const type_t object_type_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+          if (flags == attached_object::creation_flags::none)
+            flags = AttachedObject::default_creation_flags;
+
+          const type_t object_type_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id();
           data.mask.set(object_type_id);
 
           // make the get/add<AttachedObject>() segfault
@@ -752,16 +603,19 @@ namespace neam
           uint32_t index = data.attached_objects.size();
           data.attached_objects.emplace_back(object_type_id, (base_t*)(k_poisoned_pointer));
 
-          void* raw_ptr = DatabaseConf::attached_object_allocator::allocate(object_type_id, sizeof(AttachedObject), alignof(AttachedObject));
+          const bool is_transient = flags == attached_object::creation_flags::transient;
+          void* raw_ptr = allocator.allocate(is_transient, object_type_id, sizeof(AttachedObject), alignof(AttachedObject));
+
           AttachedObject* ptr = new (raw_ptr) AttachedObject(data, std::forward<DataProvider>(provider)...);
 
-          if (flags != attached_object::creation_flags::none)
-            ptr->set_creation_flags(flags);
+          ptr->set_creation_flags(flags);
 
           check::debug::n_assert(raw_ptr == (void*)static_cast<base_t*>(ptr), "attached-object base must be the first in the inheritence tree");
 
           // replace poisoned pointer with the actual one (as the object has now been fully constructed)
           data.attached_objects[index].second = ptr;
+
+          check::debug::n_assert(is_transient == ptr->fully_transient_attached_object, "invalid mix between a transient creation flag and a class not flagged as transient");
 
           if constexpr (DatabaseConf::use_attached_object_db)
           {
@@ -856,12 +710,12 @@ namespace neam
             else
             {
               // we got a fully transient object, no need for anything else
-              DatabaseConf::attached_object_allocator::deallocate(base.object_type_id, &base);
+              allocator.deallocate(base.object_type_id, &base);
             }
           }
           else
           {
-            DatabaseConf::attached_object_allocator::deallocate(base.object_type_id, &base);
+            allocator.deallocate(base.fully_transient_attached_object, base.object_type_id, &base);
           }
         }
 
@@ -972,17 +826,21 @@ namespace neam
 
         // deletion is the trigger point for re-arranging the array
         std::atomic<uint32_t> entity_deletion_count;
+        spinlock entity_list_lock;
         std::deque<entity_data_t*> entity_list;
 
-        neam::spinlock entity_data_pool_lock;
         neam::cr::memory_pool<entity_data_t> entity_data_pool;
+
+        typename DatabaseConf::attached_object_allocator allocator;
 
         friend class entity<DatabaseConf>;
         friend class attached_object::base<DatabaseConf>;
-        template<typename DBC, typename AttachedObjectClass, typename FC>
+        template<typename DBC, typename AttachedObjectClass, typename FC, attached_object::creation_flags>
         friend class attached_object::base_tpl;
         template<typename DBCFG, typename SystemClass> friend class system;
         friend class base_system<DatabaseConf>;
+        friend class system_manager<DatabaseConf>;
+        template<typename DBC, typename... AttachedObjects> friend struct attached_object_utility;
 
         friend class system_manager<DatabaseConf>;
     };

@@ -39,11 +39,15 @@ namespace neam
   {
     namespace attached_object
     {
-      template<typename DatabaseConf, typename AttachedObjectClass, typename FinalClass>
+      template<typename DatabaseConf, typename AttachedObjectClass, typename FinalClass, creation_flags DefaultCreationFlags = creation_flags::delayed>
       class base_tpl : public base<DatabaseConf>
       {
         private:
           using base_t = base<DatabaseConf>;
+
+          static inline typename type_registry<DatabaseConf>::template registration<FinalClass> _registration;
+          // force instantiation of the static member: (and avoid a warning)
+          static_assert(&_registration == &_registration);
 
         public:
           using param_t = typename base_t::param_t;
@@ -51,13 +55,15 @@ namespace neam
           static constexpr type_t ao_class_id = AttachedObjectClass::id;
 
         protected:
-          base_tpl(param_t _p, creation_flags flags = creation_flags::none)
+          // force the transient flag when non-user-gettable
+          //  (there's no need to maintain anything, as simply trying to get the object will cause a compilation error)
+          static constexpr creation_flags default_creation_flags = dbconf_can<DatabaseConf, AttachedObjectClass::id, attached_object_access::user_getable>() ? DefaultCreationFlags : creation_flags::transient;
+
+          base_tpl(param_t _p)
           : base<DatabaseConf>
             (_p,
-             // force the transient flag when non-user-gettable
-             dbconf_can<DatabaseConf, AttachedObjectClass::id, attached_object_access::user_getable>() ? flags : creation_flags::transient,
-             type_id<FinalClass, typename DatabaseConf::attached_object_type>::id,
-             AttachedObjectClass::id)
+             default_creation_flags,
+             type_id<FinalClass, typename DatabaseConf::attached_object_type>::id())
           {
             // Here, as when triggered the whole class has been generated
             static_assert_check_attached_object<DatabaseConf, FinalClass>();
@@ -109,7 +115,7 @@ namespace neam
           template<typename AttachedObject>
           bool is_required() const
           {
-            const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+            const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id();
             return this->requirements.is_set(id);
           }
 
@@ -119,7 +125,7 @@ namespace neam
           AttachedObject& get_required()
           {
             static_assert_can<DatabaseConf, AttachedObject::ao_class_id, ao_class_id, attached_object_access::ao_requireable>();
-            const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+            const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id();
             check::debug::n_assert(this->requirements.is_set(id), "get_required: The attached object to be returned has not been required");
 
             AttachedObject* ret = entity_get<AttachedObject>();
@@ -180,7 +186,7 @@ namespace neam
 
             {
               // check for existance:
-              const type_t id = type_id<FinalClass, typename DatabaseConf::attached_object_type>::id;
+              const type_t id = type_id<FinalClass, typename DatabaseConf::attached_object_type>::id();
               if (base.owner.has(id))
               {
                 FinalClass* ptr = static_cast<FinalClass*>(base.owner.get(id));

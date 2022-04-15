@@ -30,7 +30,7 @@
 #ifndef __N_19625634529221301_2572711997_COMPONENT_HPP__
 #define __N_19625634529221301_2572711997_COMPONENT_HPP__
 
-#include "../base_attached_object.hpp"
+#include "../attached_object/base_attached_object.hpp"
 #include "../type_id.hpp"
 
 namespace neam
@@ -50,11 +50,10 @@ namespace neam
         virtual ~component() = default;
 
       protected:
-        component(param_t _param, attached_object::creation_flags flags = attached_object::creation_flags::none)
+        component(param_t _param)
           : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::component_class, ComponentType>
             (
-              _param,
-              flags
+              _param
             )
         {
         }

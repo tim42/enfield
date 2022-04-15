@@ -33,16 +33,15 @@
 #include <set>
 
 #include <ntools/debug/assert.hpp>
+#include <ntools/raw_memory_pool_ts.hpp>
 #include "enfield_types.hpp"
+#include "mask.hpp"
 
 
 namespace neam
 {
   namespace enfield
   {
-    template<typename DatabaseConf> class entity;
-    template<typename DatabaseConf> class database;
-
     static constexpr uint64_t k_poisoned_pointer = uint64_t(0xA5A5A5A00A5A5A5A);
 
     namespace attached_object
@@ -53,73 +52,6 @@ namespace neam
         delayed, // default behavior
         transient, // fast creation and deletion, no for-each and queries
         force_immediate_changes // slow creation (delayed deletion), immediate availlability to for-each and queries
-      };
-
-      template<typename DatabaseConf>
-      struct mask_t
-      {
-        mask_t()
-        {
-          for (size_t j = 0; j < entry_count; ++j)
-          {
-            mask[j] = 0;
-          }
-        }
-        static constexpr size_t entry_count = (DatabaseConf::max_attached_objects_types + 63) / (64);
-
-        // perform (*this & other) == *this
-        constexpr bool match(const mask_t& o) const
-        {
-          for (size_t j = 0; j < entry_count; ++j)
-          {
-            if ((mask[j] & o.mask[j]) != mask[j])
-              return false;
-          }
-          return true;
-        }
-
-        constexpr bool operator == (const mask_t& o) const
-        {
-          for (size_t j = 0; j < entry_count; ++j)
-          {
-            if (mask[j] != o.mask[j])
-              return false;
-          }
-          return true;
-        }
-
-        constexpr void set(type_t id)
-        {
-          const uint32_t index = id / 64;
-          const uint64_t bit_mask = 1ul << (id % 64);
-          mask[index] |= bit_mask;
-        }
-
-        constexpr void unset(type_t id)
-        {
-          const uint32_t index = id / 64;
-          const uint64_t bit_mask = 1ul << (id % 64);
-          mask[index] &= ~bit_mask;
-        }
-
-        constexpr bool is_set(type_t id) const
-        {
-          const uint32_t index = id / 64;
-          const uint64_t bit_mask = 1ul << (id % 64);
-          return (mask[index] & bit_mask) != 0;
-        }
-
-        bool has_any_bit_set() const
-        {
-          for (size_t j = 0; j < entry_count; ++j)
-          {
-            if (mask[j] != 0)
-              return true;
-          }
-          return false;
-        }
-
-        uint64_t mask[entry_count] = {0};
       };
 
       /// \brief Everything attached to an entity (views, components, ...) must inherit indirectly from this class
@@ -139,8 +71,8 @@ namespace neam
           using param_t = entity_data_t&;
 
         private:
-          base(param_t& _owner, creation_flags flags, type_t _object_type_id, type_t _class_id)
-            : object_type_id(_object_type_id), class_id(_class_id), owner(_owner)
+          base(param_t& _owner, creation_flags flags, type_t _object_type_id)
+            : owner(_owner), object_type_id(_object_type_id)
           {
             set_creation_flags(flags);
 
@@ -159,11 +91,6 @@ namespace neam
           }
 
         public:
-          /// \brief The id of the type of the attached object
-          const type_t object_type_id;
-          /// \brief The class id of the attached object (view, component, ...)
-          const type_t class_id;
-
           /// \brief Return true if the user required this attached object
           bool is_user_added() const
           {
@@ -192,14 +119,19 @@ namespace neam
           }
 
         private:
-          mask_t<DatabaseConf> requirements;
+          delayed_mask<DatabaseConf> requirements;
 
           /// \brief The entity that owns that attached object
           entity_data_t& owner;
 
-          uint64_t index = 0;
+          uint32_t index = 0;
 
-          uint32_t required_count = 0;
+        public:
+          /// \brief The id of the type of the attached object
+          const type_t object_type_id;
+
+        private:
+          uint8_t required_count = 0;
 
           // can add up-to 32 flags
           bool user_added : 1 = false;
@@ -226,7 +158,7 @@ namespace neam
           friend class neam::enfield::entity<DatabaseConf>;
 
 
-          template<typename DBC, typename AttachedObjectClass, typename FC>
+          template<typename DBC, typename AttachedObjectClass, typename FC, creation_flags DCF>
           friend class base_tpl;
       };
     } // namespace attached_object

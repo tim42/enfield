@@ -91,11 +91,12 @@ namespace neam
           template<type_t ClassId, typename AttachedObject>
           struct check_attached_object : no_check<true> {};
 
-          /// \brief The attached object allocator
-          using attached_object_allocator = default_attached_object_allocator;
 
           /// \brief The maximum number of components
           static constexpr uint64_t max_attached_objects_types = 4 * 64;
+
+          /// \brief The attached object allocator
+          using attached_object_allocator = default_attached_object_allocator<eccs>;
 
           /// \brief Completly disallow the use of attached_object_db.
           /// Remove usage of queries.
@@ -151,11 +152,11 @@ namespace neam
           template<type_t ClassId, typename AttachedObject>
           struct check_attached_object : no_check<true> {};
 
-          /// \brief The attached object allocator
-          using attached_object_allocator = default_attached_object_allocator;
-
           /// \brief The maximum number of components
           static constexpr uint64_t max_attached_objects_types = 4 * 64;
+
+          /// \brief The attached object allocator
+          using attached_object_allocator = default_attached_object_allocator<conservative_eccs>;
 
           /// \brief Completly disallow the use of attached_object_db.
           /// Remove usage of queries.
@@ -213,11 +214,11 @@ namespace neam
           template<type_t ClassId, typename AttachedObject>
           struct check_attached_object : no_check<true> {};
 
-          /// \brief The attached object allocator
-          using attached_object_allocator = default_attached_object_allocator;
-
           /// \brief The maximum number of components
           static constexpr uint64_t max_attached_objects_types = 4 * 64;
+
+          /// \brief The attached object allocator
+          using attached_object_allocator = default_attached_object_allocator<ecs>;
 
           /// \brief Completly disallow the use of attached_object_db.
           /// Remove usage of queries.

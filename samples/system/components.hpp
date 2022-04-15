@@ -91,7 +91,7 @@ namespace sample
         // some bit of math:
         comp.data += comp.data * comp.data | 5;
 
-        if ((comp.data & (1 << 23)))
+        //if ((comp.data & (1 << 23)))
         {
           if (is_required<comp_1b>())
             unrequire<comp_1b>();

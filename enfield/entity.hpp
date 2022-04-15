@@ -36,17 +36,13 @@
 #include "enfield_types.hpp"
 
 #include "type_id.hpp"
-#include "internal_base_attached_object.hpp"
+#include "attached_object/internal_base_attached_object.hpp"
 #include "database_conf.hpp"
 
 namespace neam
 {
   namespace enfield
   {
-    template<typename DatabaseConf> class database;
-    template<typename DatabaseConf> class base_system;
-    template<typename DatabaseConf> class system_manager;
-
     /// \brief An entity. The entity cannot be copied, only moved. If you want to hold more than one entity,
     /// please use the memory management scheme you like the most (except reference counting, because screw ref. counts)
     /// \tparam DatabaseConf The database configuration
@@ -81,7 +77,7 @@ namespace neam
           database_t& db;
 
           /// \brief Allow a quick query of component this entity has
-          attached_object::mask_t<DatabaseConf> mask;
+          inline_mask<DatabaseConf> mask;
 
           /// \brief The list of attached_objects this entity have
           /// (we use a linear array as we don't expect that there will be more than 100 components on most entities)
@@ -93,7 +89,7 @@ namespace neam
             if (attached_objects.size() > DatabaseConf::max_component_types)
               return false;
 
-            attached_object::mask_t<DatabaseConf> actual_mask;
+            inline_mask<DatabaseConf> actual_mask;
             for (const auto& it : attached_objects)
               actual_mask.set(it.first);
 
@@ -119,7 +115,7 @@ namespace neam
           template<typename AttachedObject>
           bool has() const
           {
-            const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
+            const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id();
             return has(id);
           }
 
@@ -146,12 +142,12 @@ namespace neam
           template<typename AttachedObject>
           AttachedObject* get()
           {
-            return static_cast<AttachedObject*>(get(type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id));
+            return static_cast<AttachedObject*>(get(type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id()));
           }
           template<typename AttachedObject>
           const AttachedObject* get() const
           {
-            return static_cast<const AttachedObject*>(get(type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id));
+            return static_cast<const AttachedObject*>(get(type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id()));
           }
 
           /// \brief Remove an attached object from the entity
@@ -303,9 +299,10 @@ namespace neam
 
         friend class database<DatabaseConf>;
         friend class attached_object::base<DatabaseConf>;
-        template<typename DBCFG, typename SystemClass> friend class system;
+        template<typename DBC, typename SystemClass> friend class system;
         friend class base_system<DatabaseConf>;
         friend class system_manager<DatabaseConf>;
+        template<typename DBC, typename... AttachedObjects> friend struct attached_object_utility;
     };
   } // namespace enfield
 } // namespace neam

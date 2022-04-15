@@ -33,6 +33,7 @@
 #include "enfield_types.hpp"
 
 #include <ntools/ct_list.hpp>
+#include <ntools/raw_memory_pool_ts.hpp>
 
 namespace neam
 {
@@ -40,7 +41,8 @@ namespace neam
   {
     namespace attached_object
     {
-      template<typename DatabaseConf, typename AttachedObjectClass, typename FinalClass> class base_tpl;
+      template<typename DatabaseConf, typename AttachedObjectClass, typename FinalClass, creation_flags DefaultCreationFlags>
+      class base_tpl;
       template<typename DatabaseConf> class base;
     } // namespace attached_object
 
@@ -94,24 +96,61 @@ namespace neam
     inline /*constexpr*/ attached_object_access& operator |= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a | (int)b); return a; }
     inline /*constexpr*/ attached_object_access& operator &= (attached_object_access& a, attached_object_access b) { a = static_cast<attached_object_access>((int)a & (int)b); return a; }
 
-    /// \brief The default enfield allocator for attached objects (simply new/delete)
+    /// \brief The default enfield allocator for attached objects (using a thread-safe object pool)
     /// All allocators should respect the same conditions:
     ///   - if allocate returns, it's a valid
     /// It is guaranteed that every object with the same type id have the same size/alignment,
+    ///
+    /// Should be faster in most cases than the system allocator
+    template<typename DatabaseConf>
     struct default_attached_object_allocator
     {
+      void init_for_type(type_t type_id, size_t size, size_t align)
+      {
+        [[likely]] if (!pools[type_id].is_init())
+        {
+          pools[type_id].init(size, align, 4);
+          transient_pools[type_id].init(size, align, 4);
+        }
+      }
+
       /// \brief Allocate a new object
-      static void* allocate(type_t /*type_id*/, size_t size, size_t align)
+      void* allocate(bool transient, type_t type_id, size_t /*size*/, size_t /*align*/)
+      {
+        return (transient ? transient_pools : pools)[type_id].allocate();
+      }
+
+      /// \brief Deallocate an object
+      void deallocate(bool transient, type_t type_id, void* ptr)
+      {
+        return (transient ? transient_pools : pools)[type_id].deallocate(ptr);
+      }
+
+      cr::raw_memory_pool_ts pools[DatabaseConf::max_attached_objects_types];
+      cr::raw_memory_pool_ts transient_pools[DatabaseConf::max_attached_objects_types];
+    };
+
+    /// \brief System allocator for attached objects (using new/delete)
+    template<typename DatabaseConf>
+    struct system_attached_object_allocator
+    {
+      void init_for_type(type_t /*type_id*/, size_t /*size*/, size_t /*align*/)
+      {
+      }
+
+      /// \brief Allocate a new object
+      static void* allocate(bool /*transient*/, type_t /*type_id*/, size_t size, size_t align)
       {
         return operator new(size, std::align_val_t(align));
       }
 
       /// \brief Deallocate an object
-      static void deallocate(type_t /*type_id*/, void* ptr)
+      static void deallocate(bool /*transient*/, type_t /*type_id*/, void* ptr)
       {
         operator delete(ptr);
       }
     };
+
 
     /// \brief Check that the corresponding type satisfy the database requirements
     template<typename DatabaseConf, typename AttachedObject>
@@ -122,7 +161,7 @@ namespace neam
 
       using class_t = typename AttachedObject::class_t;
       static_assert(ct::list::has_type<typename DatabaseConf::classes, class_t>, "invalid attached object Class ID");
-      static_assert(std::is_base_of<neam::enfield::attached_object::base_tpl<DatabaseConf, class_t, AttachedObject>, AttachedObject>::value, "invalid attached object: does not inherit from the correct class");
+//       static_assert(std::is_base_of<neam::enfield::attached_object::base_tpl<DatabaseConf, class_t, AttachedObject>, AttachedObject>::value, "invalid attached object: does not inherit from the correct class");
 
       // Type specific checks (note: you should static_assert in that class)
       static_assert(DatabaseConf::template check_attached_object<AttachedObject::ao_class_id, AttachedObject>::value, "invalid attached object: database conf checks have failed");

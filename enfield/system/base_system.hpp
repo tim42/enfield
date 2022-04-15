@@ -34,6 +34,7 @@
 
 #include "../enfield_types.hpp"
 #include "../type_id.hpp"
+#include "../attached_object_utility.hpp"
 #include <ntools/ct_list.hpp>
 
 namespace neam
@@ -78,7 +79,6 @@ namespace neam
 
       private:
         using entity_data_t = typename entity<DatabaseConf>::data_t;
-        using attached_object_mask_t = attached_object::mask_t<DatabaseConf>;
 
 
         /// \brief Run if the entity has the required attached objects
@@ -93,49 +93,33 @@ namespace neam
 
         template<typename AO>
         using id_t = type_id<AO, typename DatabaseConf::attached_object_type>;
-
-        template<typename... AttachedObjects>
-        struct helper_t
-        {
-          static attached_object_mask_t make_mask()
-          {
-            attached_object_mask_t mask;
-            (mask.set(id_t<AttachedObjects>::id), ...);
-            return mask;
-          }
-          static type_t get_min_entry_count(const database<DatabaseConf>& db)
-          {
-            type_t attached_object_id = ~0u;
-            size_t min_count = ~0ul;
-            (
-              ((db.attached_object_db[id_t<AttachedObjects>::id].db.size() < min_count) ?
-               (
-                 min_count = db.attached_object_db[id_t<AttachedObjects>::id].db.size(),
-                 attached_object_id = id_t<AttachedObjects>::id,
-                 0
-               ) : 0), ...
-            );
-            return attached_object_id;
-          }
-        };
+        template<typename... Types>
+        using attached_object_utility_t = attached_object_utility<DatabaseConf, Types...>;
 
         /// \brief Set the component mask
         template<typename AttachedObjectsList>
         void set_mask()
         {
-          using helper = typename ct::list::extract<AttachedObjectsList>::template as<helper_t>;
+          using helper = typename ct::list::extract<AttachedObjectsList>::template as<attached_object_utility_t>;
           mask = helper::make_mask();
         }
 
         template<typename AttachedObjectsList>
         void compute_fewest_attached_object_id()
         {
-          using helper = typename ct::list::extract<AttachedObjectsList>::template as<helper_t>;
-          smallest_attached_object_db = helper::get_min_entry_count(db);
+          if constexpr (DatabaseConf::use_attached_object_db == true)
+          {
+            using helper = typename ct::list::extract<AttachedObjectsList>::template as<attached_object_utility_t>;
+            smallest_attached_object_db = helper::get_min_entry_count(db);
+          }
+          else
+          {
+            smallest_attached_object_db = ~type_t(0);
+          }
         }
 
       private:
-        attached_object_mask_t mask;
+        inline_mask<DatabaseConf> mask;
 
         const type_t system_id;
         type_t smallest_attached_object_db = ~type_t(0);

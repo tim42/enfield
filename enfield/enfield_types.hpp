@@ -38,10 +38,37 @@ namespace neam
   namespace enfield
   {
     /// \brief Alias for a type identifier
-    using type_t = uint32_t;
+    using type_t = uint16_t;
 
-    /// \brief A generic identifier (must be the double of the type_t size)
-    using id_t = uint64_t;
+    /// \brief Different possibilities for filtering queries
+    enum class query_condition
+    {
+      each,
+      any,
+    };
+
+    enum class for_each
+    {
+      next, // conitnue (default if the function returns void)
+      stop, // break the for-each loop
+    };
+
+
+    template<typename DatabaseConf> class database;
+    template<typename DatabaseConf> class base_system;
+    template<typename DatabaseConf> class system_manager;
+    template<typename DatabaseConf> class entity;
+
+    template<typename DatabaseConf, typename... AttachedObjects> struct attached_object_utility;
+
+    namespace attached_object
+    {
+      enum class creation_flags;
+
+      template<typename DatabaseConf> class base;
+      template<typename DatabaseConf, typename AttachedObjectClass, typename FinalClass, creation_flags DefaultCreationFlags>
+      class base_tpl;
+    }
   } // namespace enfield
 } // namespace neam
 

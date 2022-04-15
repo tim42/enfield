@@ -34,7 +34,7 @@
 #include <algorithm>
 #include <type_traits>
 
-#include "../base_attached_object.hpp"
+#include "../attached_object/base_attached_object.hpp"
 #include "../type_id.hpp"
 
 namespace neam
@@ -54,8 +54,10 @@ namespace neam
     /// The concept_logic class defines the communication interface from the concept provider (the class that inherit from your concept_provider class) and my_concept,
     /// it should not be used to constrain the concept provider to have a specific API as your concept_provider knows the exact type of the concept provider. (use get_base_as < ConceptProvider > ())
     template<typename DatabaseConf, typename ConceptType>
-    class ecs_concept : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
+    class ecs_concept : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType, attached_object::creation_flags::force_immediate_changes>
     {
+        using parent_t = attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType, attached_object::creation_flags::force_immediate_changes>;
+
       public:
         using param_t = typename attached_object::base<DatabaseConf>::param_t;
 
@@ -109,12 +111,8 @@ namespace neam
       protected:
         // the default for concepts is to be fully synchrone with the db changes
         // it's a bit slow, but should allow much more transient attached_objects
-        ecs_concept(param_t _param, attached_object::creation_flags flags = attached_object::creation_flags::force_immediate_changes)
-          : attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType>
-            (
-              _param,
-              flags
-            )
+        ecs_concept(param_t _param)
+          : parent_t(_param)
         {
           // checks: (can't be in the class body, as the whole base_concept & ConceptType types have to be defined.
 

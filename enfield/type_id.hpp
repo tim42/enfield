@@ -47,15 +47,11 @@ namespace neam
           /// \brief Return the next id
           static type_t get_next_id()
           {
-//             check::debug::n_assert(counter != 0, "neam::enfield::type_id<>: more than 2^32 identifiers have been generated");
+            static type_t counter = 1;
+//             check::debug::n_assert(counter != 0, "neam::enfield::type_id<>: more than 2^{} type identifiers have been generated", sizeof(type_t) * 8);
             return ++counter;
           }
-
-        private:
-          static type_t counter;
       };
-      template<typename Class>
-      type_t type_id_base<Class>::counter = 1;
     } // namespace internal
 
     /// \brief Generate a unique identifier (at runtime) for a given type.
@@ -64,11 +60,12 @@ namespace neam
     class type_id : private internal::type_id_base<Class>
     {
       public:
-        /// \brief The type identifier
-        static const type_t id;
+        static type_t id()
+        {
+          static const type_t id = type_id<Type, Class>::get_next_id();
+          return id;
+        }
     };
-    template<typename Type, typename Class>
-    const type_t type_id<Type, Class>::id = type_id<Type, Class>::get_next_id();
 
     /// \brief A generic type id (you should not use this one)
     template<typename Type>

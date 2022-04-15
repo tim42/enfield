@@ -51,8 +51,8 @@ namespace neam
         private:
           using component = neam::enfield::component<DatabaseConf, data_holder<DatabaseConf, Data, ConceptProviders...>>;
         public:
-          data_holder(typename component::param_t p, attached_object::creation_flags flags = attached_object::creation_flags::none)
-            : component(p, flags),
+          data_holder(typename component::param_t p)
+            : component(p),
               ConceptProviders<data_holder<DatabaseConf, Data, ConceptProviders...>>(*this)...
           {
           }
