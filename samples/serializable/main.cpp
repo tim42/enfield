@@ -86,7 +86,16 @@ struct truc : public neam::enfield::component<db_conf, truc>,
 
   // our data
   int dummy = -1;
-  std::string other_dummy = "some stirng";
+  std::string other_dummy = "some string";
+  const float c = 4.25f;
+  neam::rle::type_mode mode = neam::rle::type_mode::versioned_tuple;
+  const std::map<int, const std::string> data =
+  {
+    {1, "caca"},
+    {1000, "truc"},
+    {-100, "machin"},
+    {-42, "yay"},
+  };
 
   friend serializable_t;
 };
@@ -96,7 +105,10 @@ N_METADATA_STRUCT(truc)
   using member_list = neam::ct::type_list
   <
     N_MEMBER_DEF(dummy),
-    N_MEMBER_DEF(other_dummy)
+    N_MEMBER_DEF(other_dummy),
+    N_MEMBER_DEF(c),
+    N_MEMBER_DEF(mode),
+    N_MEMBER_DEF(data)
   >;
 };
 

@@ -33,11 +33,15 @@
 #include <ntools/struct_metadata/fmt_support.hpp>
 #include <ntools/ct_list.hpp>
 #include <ntools/type_id.hpp>
+#include <ntools/log_type.hpp>
 
 namespace neam::enfield::concepts
 {
   /// \brief Simple printable concept. Compatible with auto-serializable components
-  /// \note currently very bare-bone and require a formatter for specific types to be present (a fmt::formatter)
+  /// \note use neam::cr::log_type for its purpose.
+  /// Extending with specific type support is done via inheriting neam::cr::log_type::helpers::auto_register and implementing the api.
+  ///
+  /// \note the actual logging is done via serialization + metadata. (it is quite slow, as it's a three-steps process).
   template<typename DatabaseConf>
   class printable : public ecs_concept<DatabaseConf, printable<DatabaseConf>>
   {
@@ -76,19 +80,7 @@ namespace neam::enfield::concepts
 
           static void print_type(const ConceptProvider& v)
           {
-            cr::out().log("{} =>", format_type<ConceptProvider>());
-            cr::out().log("{{");
-            [&v]<size_t... Indices>(std::index_sequence<Indices...>)
-            {
-              ([&v]<size_t Index>()
-              {
-                using member = ct::list::get_type<n_metadata_member_list<ConceptProvider>, Index>;
-                using member_type = typename member::type;
-
-                cr::out().log("  {} {}  = {}", format_type<member_type>(), member::name.string, member_at<member_type, member::offset>(v));
-              } .template operator()<Indices>(), ...);
-            }(std::make_index_sequence<ct::list::size<n_metadata_member_list<ConceptProvider>>> {});
-            cr::out().log("}}");
+            cr::log_type::log_type<ConceptProvider>(v);
           }
 
         private:
