@@ -28,8 +28,14 @@ endif()
 # dependencies:
 include(cmake/deps.cmake)
 
-# build / configure the third_party libs
-add_subdirectory(third_party/)
+if (NOT DEFINED ENFIELD_IS_MASTER_PROJECT)
+  option(ENFIELD_IS_MASTER_PROJECT "Use the third-party folder and build samples" ON)
+endif()
+
+if (${ENFIELD_IS_MASTER_PROJECT})
+  # build / configure the third_party libs
+  add_subdirectory(third_party/)
+endif()
 
 # project flags:
 include(cmake/flags.cmake)
@@ -47,8 +53,10 @@ add_compile_definitions(N_ALLOW_DEBUG=false)
 add_compile_definitions(N_DISABLE_CHECKS=false)
 
 # build a static lib
-add_subdirectory(${CMAKE_PROJECT_NAME})
+add_subdirectory(enfield/)
 
-# build the samples
-add_subdirectory(samples/)
+if (${ENFIELD_IS_MASTER_PROJECT})
+  # build the samples
+  add_subdirectory(samples/)
+endif()
 
