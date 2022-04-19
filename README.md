@@ -2,89 +2,72 @@
 
 Enfield: C++ EWS `[Entity Whatever System]` thingy.
 
-This includes ECS `[entity component system]`, ECCS/E2CS/EC²S `[entity component concept system]`, ...
+This includes ECS `[entity component system]`, ECCS `[entity component concept system]`, ...
 
 ---
 
-This project is under development, and might not be usable in most projects.
-Yet.
+This project is under development.
 
 ---
 
 
-# important notes
+# Important Notes
 
-Enfield makes a trade-off of usability, speed and adaptability. The main interesting specificity is something named "concepts".
+Enfield makes a trade-off of usability, speed and adaptability.
+The current direction favor usability and adaptability, and rely only on core C++ (no additional tools/external code parsing/processing).
 
-Enfield operates on entities and what is called "attached-objects", which are objects that can be attached to an entity (like components or concepts).
-Rules governing the behavior of a category of such attached objects is governed by the database configuration (see `database_conf_impl.hpp` and the section below). Configuration allows for specific behaviors, most of which are enforced at compile-time.
+The core... concept... of this usability and adaptability is what is called concepts.
+They can be seens as both an interface and a multiplexer over components, fixing one of the major drawbacks of pure ecs, component/system creep and poor code reuse.
+Systems may operate on concepts instead of components, making the same systems capable of running over mutliple distinct components (like the auto-updatable concept present in the samples which acts a bit like Unity's MonoBehaviour Update function).
 
-The current existing categories of attached-objects are:
- - **components**: Like normal ECS components, mainly holds data. They can be added and removed, and can have dependency to other components.
- - **concepts**: A more generic view on components. Cannot be added or removed (they are automatically added and removed as components implementing them are added or removed), but are used to represent and abstract a higher level... concept. Such concepts can be "serializable", "updatable", "renderable", ... They bridge the gap between systems and components, avoiding making system too specific and working only with a set of known components (which is the problem almost all current ECS implementations have).
+(Pure ECS is similar to plain C code, with structs being components and functions being systems, whereas concepts are closer to abstractions/C++20 concepts).
 
-Systems are also presents and have multiple modes of multi-threading support, depending on what is required. Support for the ntools' task_manager is also present.
+# Enfield
 
+## Attached Objects (the Wathever in EWS)
 
-Guarantees:
- - Concepts: A concept can only exists iff one or more components implement that concept.
- - Components dependency: (both for concepts and components): A component that has not been requested by the user will be destroyed when the last concept/component
-   requiring it is removed.
- - Components dependency: dependency cycles throws an exception or (if in super-release) a hard-segfault over a poisoned pointer.
- - Concepts can implement other concepts
- - Components must be constructible with respect of the enfield construction contract
- - Iterating over components or concepts of a given type is O(1) (for the next component/entity) and cache efficient.
-   - Iterating over entities that matches a set of component is less cache friendly and a bit less efficient (worst case is trying to match entities with two components where no entities have both components but entities with only one of them are in very big quantity)
- - Fully modifiable (via the db-configuration pattern) with strong compile-time guarantees (access rights, ...).
-   see `database_conf_impl.hpp`. See also the section below:
+Attached objects are objects that can be... attached... to an entity, the entity being the glue between those.
+Both components and concepts are "classes" of attached objects, and more classes of attached objects can be implemented as needed.
 
-# configuration
+Classes of attached objects share the same behavior (ex: concepts cannot be required or created and have a specific architecture to them).
 
-You can have multiple DB implementing different patterns (like a pure ECS, or a ECCS or whatever you want), all you have to do is providing the correct configuration to the db.
+Attached objects can require other attached objects (as allowed by the database configuration) and attached object required this way will not be destructed until no other attached object require them.
 
-A big chunk of the configuration is the rights management. There are two classes that a configuration class must declare:
- - `class_rights`: The global usage rights of an _attached object class_
- - `specific_class_rights`: An override of `class_rights` when the corresponding _attached object class_ is used by another _attached object class_. (you can either set more or less rights for a given class)
+## Components
 
-Only `class_rights` can define "user-rights" (rights given to the public API of the entity class).
- 
-When an unauthorized operation is done (aka. an operation not explicitly permitted in the rights), the compilation aborts.
+Hold data, might implement/provide a concept.
 
-# systems
+## Concepts
 
-Enfield systems have been designed to be heavily threadable, super lightweight (without much overhead) and easy to create.
+Abstraction of the capabilities of a set of components/concepts. (like serializable, auto-updatable, renderable, ...)
+Is a CRTP abstract class + interface.
 
-```c++
-class auto_updatabe_system : public neam::enfield::system<db_conf, auto_updatabe_system>
-{
-  public:
-    system(neam::enfield::database<db_conf> &_db)
-      : neam::enfield::system<db_conf, auto_updatabe_system>(_db)
-    {}
+May hold a bit of logic.
 
-  private:
-    /// \brief Called at the start of a "frame"
-    virtual void begin() final {}
+## Systems
 
-    /// \brief Called for every compatible entities
-    void on_entity(auto_updatable &au)
-    {
-      au.update_all();
-    }
+Logic. (can be seen as a transform operation on entities)
 
-    /// \brief Called after all the entities have been processed
-    virtual void end() final {}
+Enfield provide a system manager (or a system stack), which allow to indicate dependency between systems.
+Multiple system managers can run concurrently.
 
-    friend class neam::enfield::system<db_conf, auto_updatabe_system>;
-};
-```
+There are two different mode that system managers can run their systems:
+ - per entity (fastest): an entity will go through all the systems in the stack, each entities being run independently.
+   Used when the systems don't have side effects on other entities, and only have an order requirement on a per-entity basis
+ - per system: all the entities will go through a system, and once all of them are done they will all go through the next one, ...
+   Used when systems have a dependency on another entity (like a look-at system might require that the looked-at entity has gone though the update-transform system)
 
-The `on_entity` function can have the signature it wants (a bit like with for_each) and the database will populate its parameters with the corresponding attached objects, skipping the entity
-if there's a missing attached object. So, if you want your system to work with any entities that have both an auto_updatable and a serializable concept:
+Systems managers uses the neam::threading task manager (ntools) to dispatch their tasks (so a system-stack can be confined to a task-group and dependency among system-stack can be handled by having dependency between task-groups (which has a strictly constant & trivial cost in the current implementation)).
 
-`void on_entity(auto_updatable &au, const serializable &ser)`
+## Entities
 
+Unique pointer to a small set of data which has ownership/control the lifespan of a set of attached objects.
+Cannot be copied. (but if duplicating an entity is required, the serializable concept might help).
 
+## Database
+
+Where the entities and attached object live.
+Are highly configurable, with some existing presets present in `enfield/databse_conf_impl.hpp`.
 
 ---
 
