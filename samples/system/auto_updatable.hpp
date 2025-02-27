@@ -27,8 +27,7 @@
 // SOFTWARE.
 //
 
-#ifndef __N_14159230731374730825_173045086_AUTOUPDATE_HPP__
-#define __N_14159230731374730825_173045086_AUTOUPDATE_HPP__
+#pragma once
 
 #include "enfield/enfield.hpp"
 
@@ -107,6 +106,4 @@ namespace sample
       friend ecs_concept;
   };
 } // namespace sample
-
-#endif // __N_14159230731374730825_173045086_AUTOUPDATE_HPP__
 

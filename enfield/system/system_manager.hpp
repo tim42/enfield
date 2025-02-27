@@ -27,8 +27,7 @@
 // SOFTWARE.
 //
 
-#ifndef __N_23127891179685730_431825828_SYSTEM_MANAGER_HPP__
-#define __N_23127891179685730_431825828_SYSTEM_MANAGER_HPP__
+#pragma once
 
 #include <vector>
 #include <atomic>
@@ -150,10 +149,11 @@ namespace neam::enfield
 
           // compute the number of task to dispatch, but limit that to a max number
           // to avoid saturating the task system
-          const uint32_t entity_count = db.get_entity_count();
-          uint32_t dispatch_count = entity_count / entity_per_task;
-          if (dispatch_count > max_task_count)
-            dispatch_count = max_task_count;
+          // const uint32_t entity_count = db.get_entity_count();
+          // uint32_t dispatch_count = entity_count / entity_per_task;
+          // if (dispatch_count > max_task_count)
+            // dispatch_count = max_task_count;
+          uint32_t dispatch_count = max_task_count;
           for (uint32_t i = 0; i < dispatch_count; ++i)
           {
             threading::task_wrapper task = tm.get_task(group, [this, &db, &tm, &final_task = *final_task_wr]() { run_all_systems(db, tm, final_task); });
@@ -194,9 +194,23 @@ namespace neam::enfield
 
           final_task.add_dependency_to(*next_sync_wr);
 
-          const uint32_t entity_count = DatabaseConf::use_attached_object_db && systems[system_index]->should_use_attached_object_db
-                                        ? db.get_attached_object_count(systems[system_index]->smallest_attached_object_db)
-                                        : db.get_entity_count();
+          uint32_t entity_count = 0;
+          if constexpr (DatabaseConf::use_attached_object_db)
+          {
+            if (systems[system_index]->should_use_attached_object_db || !DatabaseConf::use_entity_db)
+            {
+              entity_count = db.get_attached_object_count(systems[system_index]->smallest_attached_object_db);
+            }
+            else if (!systems[system_index]->should_use_attached_object_db)
+            {
+              if constexpr (DatabaseConf::use_entity_db)
+                entity_count = db.get_entity_count();
+            }
+          }
+          else if constexpr (DatabaseConf::use_entity_db)
+          {
+            entity_count = db.get_entity_count();
+          }
           // create the worker tasks:
           uint32_t dispatch_count = entity_count / entity_per_task;
           if (dispatch_count > max_task_count)
@@ -220,12 +234,14 @@ namespace neam::enfield
         base_system<DatabaseConf>& system = *systems[system_index];
         if (!DatabaseConf::use_attached_object_db || system.should_use_attached_object_db == false)
         {
+          std::lock_guard _lg(spinlock_shared_adapter::adapt(db.entity_list_lock));
+
           // iterate over all entities:
           for (uint32_t i = 0; i < entity_per_task && base_index + i < db.get_entity_count(); ++i)
           {
-            entity_data_t& data = db.get_entity(base_index + i);
-
-            system.try_run(data);
+            entity_data_t* data = db.get_entity(base_index + i);
+            if (data != nullptr)
+              system.try_run(*data);
           }
 
           // not completed yet: we need more tasks:
@@ -263,13 +279,16 @@ namespace neam::enfield
         TRACY_SCOPED_ZONE;
         const uint32_t base_index = index.fetch_add(entity_per_task);
 
+        std::lock_guard _lg(spinlock_shared_adapter::adapt(db.entity_list_lock));
         // for each entities, run all systems:
         for (uint32_t i = 0; i < entity_per_task && base_index + i < db.get_entity_count(); ++i)
         {
-          entity_data_t& data = db.get_entity(base_index + i);
-
-          for (auto& sys : systems)
-            sys->try_run(data);
+          entity_data_t* data = db.get_entity(base_index + i);
+          if (data != nullptr)
+          {
+            for (auto& sys : systems)
+              sys->try_run(*data);
+          }
         }
 
         // not completed yet: we need more tasks:
@@ -291,6 +310,4 @@ namespace neam::enfield
       alignas(64) std::atomic<uint32_t> index;
   };
 } // namespace neam::enfield
-
-#endif // __N_23127891179685730_431825828_SYSTEM_MANAGER_HPP__
 

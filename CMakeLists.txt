@@ -48,15 +48,14 @@ endif()
 # global setup:
 add_compile_definitions(N_HYDRA_RESOURCES_OBFUSCATE=1) # obfuscate the index and the resources. (require an index rebuild / res repack)
 add_compile_definitions(N_RLE_VERBOSE_FAILS=1)
-add_compile_definitions(N_RES_MAX_SIZE_TO_EMBED=64) # resources <= this size will be written in the index and always be in memory
 add_compile_definitions(N_ALLOW_DEBUG=false)
 add_compile_definitions(N_DISABLE_CHECKS=false)
 
 # build a static lib
 add_subdirectory(enfield/)
 
-if (${ENFIELD_IS_MASTER_PROJECT})
+#if (${ENFIELD_IS_MASTER_PROJECT})
   # build the samples
   add_subdirectory(samples/)
-endif()
+#endif()
 

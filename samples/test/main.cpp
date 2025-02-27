@@ -111,7 +111,7 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private printable
       std::map<int, int> ret = get_persistent_data();
       for (const auto &it : ret)
       {
-        neam::cr::out.log() << LOGGER_INFO << "  { " << it.first << ", " << it.second << " }" << std::endl;
+        neam::get_global_logger().log() << LOGGER_INFO << "  { " << it.first << ", " << it.second << " }" << std::endl;
       }
     }
 
@@ -125,7 +125,7 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private printable
     ///       all it asks is that you can do a xxx.print(); without causing a compilation error.
     void print(const std::string &hello_message = "howdy") const
     {
-      neam::cr::out.log() << LOGGER_INFO << hello_message << ": truc2" << std::endl;
+      neam::get_global_logger().log() << LOGGER_INFO << hello_message << ": truc2" << std::endl;
     }
 
     std::map<int, int> get_data_to_serialize() const
@@ -166,7 +166,7 @@ class truc : public neam::enfield::component<db_conf, truc>,
     {
 //       get_required<truc2>().print("greetings from truc::print");
 
-      neam::cr::out.log() << "hello: truc" << std::endl;
+      neam::get_global_logger().log() << "hello: truc" << std::endl;
 
       return "truc";
     }
@@ -182,7 +182,7 @@ class truc : public neam::enfield::component<db_conf, truc>,
 
 int main(int, char **)
 {
-  neam::cr::out.log_level = neam::cr::stream_logger::verbosity_level::debug;
+  neam::get_global_logger().log_level = neam::cr::stream_logger::verbosity_level::debug;
 
   neam::enfield::database<db_conf> db;
   neam::enfield::system_manager<db_conf> sysmgr;
@@ -194,14 +194,14 @@ int main(int, char **)
   entity.add<truc>().print();
 
 //   entity.get<truc2>()->print();
-//   neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
+//   neam::get_global_logger().log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
 
   neam::cr::raw_data dt;
   db.for_each([&dt, &db](serializable &s)
   {
     dt = s.serialize();
     db.break_for_each();
-//     neam::cr::out.log() << (char *)dt.data << std::endl;
+//     neam::get_global_logger().log() << (char *)dt.data << std::endl;
   });
 
   auto entity2 = db.create_entity();
@@ -217,15 +217,15 @@ int main(int, char **)
   // entity.add<printable>();
   // entity.remove<printable>();
 
-//   neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
-//   neam::cr::out.log() << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
+//   neam::get_global_logger().log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
+//   neam::get_global_logger().log() << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
 
   entity.add<truc>();
   entity.add<truc2>();
   entity.remove<truc>();
 
-//   neam::cr::out.log() << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
-//   neam::cr::out.log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
+//   neam::get_global_logger().log() << "has<truc2>: " << std::boolalpha << entity.has<truc2>() << std::endl;
+//   neam::get_global_logger().log() << "has<printable>: " << std::boolalpha << entity.has<printable>() << std::endl;
 
   return 0;
 }

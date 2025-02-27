@@ -27,8 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_3158130790807728943_2877410136_DATABASE_HPP__
-#define __N_3158130790807728943_2877410136_DATABASE_HPP__
+#pragma once
+
 
 #include <unordered_set>
 #include <algorithm>
@@ -48,6 +48,10 @@
 #include <ntools/debug/assert.hpp>
 #include <ntools/tracy.hpp>
 #include <ntools/threading/threading.hpp>
+
+#ifndef ENFIELD_ENABLE_DEBUG_CHECKS
+# define ENFIELD_ENABLE_DEBUG_CHECKS 1
+#endif
 
 namespace neam
 {
@@ -77,11 +81,12 @@ namespace neam
 
         struct attached_object_db_t
         {
-          // deletion is the trigger point for re-arrangin the array
+          // deletion is the trigger point for re-arranging the array
           std::atomic<uint32_t> deletion_count;
 
-          spinlock lock;
-          std::deque<base_t*> db;
+          // operation on entries in the db are shared operations, operations that operate on the DB object itself are exclusives
+          mutable shared_spinlock lock;
+          std::deque<cr::raw_ptr<base_t>> db;
         };
 
         database(const database&) = delete;
@@ -96,7 +101,7 @@ namespace neam
           auto& debug_info = type_registry<DatabaseConf>::debug_info();
           for (size_t i = 0; i < allocator_info.size(); ++i)
           {
-            cr::out().debug("  {}: size of {} bytes, aligned on {} bytes", debug_info[i].type_name, allocator_info[i].size, allocator_info[i].alignment);
+            cr::out().debug("  {}: id: {}, size of {} bytes, aligned on {} bytes", debug_info[i].type_name, debug_info[i].id, allocator_info[i].size, allocator_info[i].alignment);
             allocator.init_for_type(allocator_info[i].id, allocator_info[i].size, allocator_info[i].alignment);
           }
         }
@@ -104,10 +109,7 @@ namespace neam
       public:
         ~database()
         {
-          if constexpr(DatabaseConf::use_attached_object_db)
-          {
-            apply_component_db_changes();
-          }
+          apply_component_db_changes();
 
           check::debug::n_assert(entity_data_pool.get_number_of_object() == 0, "There are entities that are still alive AFTER their database has been destructed. This will lead to crashes.");
         }
@@ -118,22 +120,34 @@ namespace neam
           entity_data_t* data = entity_data_pool.allocate();
           new (data) entity_data_t(*this); // construct
 
+          data->weak_ref_indirection = entity_t::weak_ref_indirection_t::create(data);
+
           entity_t ret(*data);
-#ifdef ENFIELD_ENABLE_DEBUG_CHECKS
+#if ENFIELD_ENABLE_DEBUG_CHECKS
           data->assert_valid();
 #endif
 
-          // for systems
-          std::lock_guard<spinlock> _lg(entity_list_lock);
-          data->index = entity_list.size();
-          entity_list.push_back(data);
+          if constexpr (DatabaseConf::use_entity_db)
+          {
+            // for systems
+            std::lock_guard _lg(spinlock_exclusive_adapter::adapt(entity_list_lock));
+            data->index = entity_list.size();
+            entity_list.push_back(data);
+          }
 
           return ret;
         }
 
         size_t get_entity_count() const
         {
+          static_assert(DatabaseConf::use_entity_db, "cannot call get_entity_count when entity-db is disabled");
           return entity_list.size();
+        }
+
+        template<typename AttachedObject>
+        size_t get_attached_object_count() const
+        {
+          return get_attached_object_count(id_t<AttachedObject>::id());
         }
 
         size_t get_attached_object_count(type_t id) const
@@ -190,7 +204,7 @@ namespace neam
           TRACY_SCOPED_ZONE;
 
           static_assert_check_attached_object<DatabaseConf, AttachedObject>();
-          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::user_getable>();
+          static_assert_can<DatabaseConf, AttachedObject::ao_class_id, attached_object_access::db_queryable>();
 
           const type_t attached_object_id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
           if (attached_object_id > DatabaseConf::max_attached_objects_types)
@@ -211,29 +225,72 @@ namespace neam
         /// Calling this function every now and then will prevent the DB from slowing-down too much
         /// \warning VERY SLOW
         /// \note should be called after apply_component_db_changes
-        void optimize()
+        void optimize(bool force = false)
         {
           TRACY_SCOPED_ZONE;
-          if (entity_deletion_count.load(std::memory_order_acquire) > k_deletion_count_to_optimize)
+          if constexpr(DatabaseConf::use_entity_db)
           {
-            std::lock_guard<spinlock> _lg(entity_list_lock);
-            entity_deletion_count.store(0, std::memory_order_release);
-            std::sort(entity_list.begin(), entity_list.end());
-            for (uint32_t i = 0; i < entity_list.size(); ++i)
-              entity_list[i]->index = i;
+            if (entity_deletion_count.load(std::memory_order_acquire) > k_deletion_count_to_optimize || force)
+            {
+              std::lock_guard _lg(spinlock_exclusive_adapter::adapt(entity_list_lock));
+              entity_deletion_count.store(0, std::memory_order_release);
+              // we assume everything is already somewhat sorted, and we just need compaction
+              uint32_t shift = 0;
+              for (uint32_t i = 0; i < entity_list.size(); ++i)
+              {
+                if (entity_list[i] == nullptr)
+                {
+                  shift += 1;
+                  continue;
+                }
+                if (shift != 0)
+                {
+                  entity_list[i - shift] = std::move(entity_list[i]);
+                  entity_list[i - shift]->index = i - shift;
+                }
+              }
+              entity_list.resize(entity_list.size() - shift);
+              // cr::out().debug("db::optimize: entity size: {} (removed {} entries)", entity_list.size(), shift);
+
+              if constexpr (0)
+              {
+                // old way
+                std::sort(entity_list.begin(), entity_list.end());
+                for (uint32_t i = 0; i < entity_list.size(); ++i)
+                  entity_list[i]->index = i;
+              }
+            }
           }
 
-          if constexpr(!DatabaseConf::use_attached_object_db) return;
-
-          for (auto& it : attached_object_db)
+          if constexpr(DatabaseConf::use_attached_object_db)
           {
-            if (it.deletion_count.load(std::memory_order_acquire) < k_deletion_count_to_optimize)
-              continue;
-            std::lock_guard<spinlock> _lg(it.lock);
-            it.deletion_count.store(0, std::memory_order_release);
-            std::sort(it.db.begin(), it.db.end());
-            for (uint32_t i = 0; i < it.db.size(); ++i)
-              it.db[i]->index = i;
+            for (auto& it : attached_object_db)
+            {
+              if (it.deletion_count.load(std::memory_order_acquire) < k_deletion_count_to_optimize || force)
+                continue;
+              std::lock_guard _lg(spinlock_exclusive_adapter::adapt(it.lock));
+              it.deletion_count.store(0, std::memory_order_release);
+              // we assume everything is already somewhat sorted, and we just need compaction
+              uint32_t shift = 0;
+              for (uint32_t i = 0; i < it.db.size(); ++i)
+              {
+                if (it.db[i] == nullptr)
+                {
+                  shift += 1;
+                  continue;
+                }
+                if (shift != 0)
+                {
+                  it.db[i - shift] = std::move(it.db[i]);
+                  it.db[i - shift]->index = i - shift;
+                }
+              }
+              it.db.resize(it.db.size() - shift);
+              // cr::out().debug("db::optimize: ao-db[{}]: size: {} (removed {} entries)", &it - attached_object_db, it.db.size(), shift);
+              // std::sort(it.db.begin(), it.db.end());
+              // for (uint32_t i = 0; i < it.db.size(); ++i)
+              //   it.db[i]->index = i;
+            }
           }
         }
 
@@ -245,38 +302,74 @@ namespace neam
         {
           auto final_task = tm.get_task(group_id, []{});
 
-          if (entity_deletion_count.load(std::memory_order_acquire) > k_deletion_count_to_optimize)
+          if constexpr(DatabaseConf::use_entity_db)
           {
-            auto sort = tm.get_task(group_id, [this]
+            if (entity_deletion_count.load(std::memory_order_acquire) > k_deletion_count_to_optimize)
             {
-              TRACY_SCOPED_ZONE;
-              std::lock_guard<spinlock> _lg(entity_list_lock);
-              entity_deletion_count.store(0, std::memory_order_release);
-              std::sort(entity_list.begin(), entity_list.end());
-              for (uint32_t i = 0; i < entity_list.size(); ++i)
-                entity_list[i]->index = i;
-            });
-            final_task->add_dependency_to(*sort);
+              auto sort = tm.get_task(group_id, [this]
+              {
+                TRACY_SCOPED_ZONE;
+                std::lock_guard _lg(spinlock_exclusive_adapter::adapt(entity_list_lock));
+                entity_deletion_count.store(0, std::memory_order_release);
+                // we assume everything is already somewhat sorted, and we just need compaction
+                uint32_t shift = 0;
+                for (uint32_t i = 0; i < entity_list.size(); ++i)
+                {
+                  if (entity_list[i] == nullptr)
+                  {
+                    shift += 1;
+                    continue;
+                  }
+                  if (shift != 0)
+                  {
+                    entity_list[i - shift] = std::move(entity_list[i]);
+                    entity_list[i - shift]->index = i - shift;
+                  }
+                }
+                entity_list.resize(entity_list.size() - shift);
+                // std::sort(entity_list.begin(), entity_list.end());
+                // for (uint32_t i = 0; i < entity_list.size(); ++i)
+                //   entity_list[i]->index = i;
+              });
+              final_task->add_dependency_to(*sort);
+            }
           }
 
-          if constexpr(!DatabaseConf::use_attached_object_db) return final_task;
-
-          for (auto& it : attached_object_db)
+          if constexpr(DatabaseConf::use_attached_object_db)
           {
-            if (it.deletion_count.load(std::memory_order_acquire) < k_deletion_count_to_optimize)
-              continue;
-            if (it.db.empty())
-              continue;
-            auto ao_sort = tm.get_task(group_id, [&it]
+            for (auto& it : attached_object_db)
             {
-              TRACY_SCOPED_ZONE;
-              std::lock_guard<spinlock> _lg(it.lock);
-              it.deletion_count.store(0, std::memory_order_release);
-              std::sort(it.db.begin(), it.db.end());
-              for (uint32_t i = 0; i < it.db.size(); ++i)
-                it.db[i]->index = i;
-            });
-            final_task->add_dependency_to(*ao_sort);
+              if (it.db.empty())
+                continue;
+              if (it.deletion_count.load(std::memory_order_acquire) < k_deletion_count_to_optimize)
+                continue;
+              auto ao_sort = tm.get_task(group_id, [&it]
+              {
+                TRACY_SCOPED_ZONE;
+                std::lock_guard _lg(spinlock_exclusive_adapter::adapt(it.lock));
+                it.deletion_count.store(0, std::memory_order_release);
+                // we assume everything is already somewhat sorted, and we just need compaction
+                uint32_t shift = 0;
+                for (uint32_t i = 0; i < it.db.size(); ++i)
+                {
+                  if (it.db[i] == nullptr)
+                  {
+                    shift += 1;
+                    continue;
+                  }
+                  if (shift != 0)
+                  {
+                    it.db[i - shift] = std::move(it.db[i]);
+                    it.db[i - shift]->index = i - shift;
+                  }
+                }
+                it.db.resize(it.db.size() - shift);
+                // std::sort(it.db.begin(), it.db.end());
+                // for (uint32_t i = 0; i < it.db.size(); ++i)
+                //   it.db[i]->index = i;
+              });
+              final_task->add_dependency_to(*ao_sort);
+            }
           }
 
           return final_task;
@@ -298,47 +391,48 @@ namespace neam
           if constexpr(DatabaseConf::use_attached_object_db)
           {
             for (auto& it : attached_object_db)
-              it.lock.lock();
+              it.lock.lock_exclusive();
           }
 
-          for (auto& it : pending_change_db)
+          while (!pending_attached_object_changes.empty())
           {
-            std::lock_guard<spinlock>(it.lock);
-            for (auto* base : it.db)
+            base_t* base = nullptr;
+            if (!pending_attached_object_changes.try_pop_front(base))
+              break;
+            if constexpr (!DatabaseConf::use_attached_object_db)
             {
-              if constexpr (!DatabaseConf::use_attached_object_db)
+              auto& allocator_info = type_registry<DatabaseConf>::allocator_info();
+              allocator.deallocate(base->fully_transient_attached_object, base->object_type_id, allocator_info[base->object_type_id].size, allocator_info[base->object_type_id].alignment, base);
+            }
+            else
+            {
+              if (base->authorized_destruction)
               {
-                allocator.deallocate(base->fully_transient_attached_object, base->object_type_id, base);
-              }
-              else
-              {
-                if (base == nullptr) // transient object being removed
+                if (!base->in_attached_object_db)
                 {
                   ++skipped_count;
-                  continue;
+                  auto& allocator_info = type_registry<DatabaseConf>::allocator_info();
+                  allocator.deallocate(base->fully_transient_attached_object, base->object_type_id, allocator_info[base->object_type_id].size, allocator_info[base->object_type_id].alignment, base);
                 }
-
-                if (base->authorized_destruction)
+                else
                 {
                   ++removed_count;
                   remove_from_attached_db(*base);
                 }
-                else
-                {
-                  ++added_count;
-                  add_to_attached_db(*base);
-                }
+              }
+              else
+              {
+                ++added_count;
+                add_to_attached_db(*base);
               }
             }
-            // clear the pending changes:
-            it.db.clear();
           }
 
           // unlock all db:
           if constexpr(DatabaseConf::use_attached_object_db)
           {
             for (auto& it : attached_object_db)
-              it.lock.unlock();
+              it.lock.unlock_exclusive();
           }
 
           if constexpr(DatabaseConf::use_attached_object_db)
@@ -359,6 +453,8 @@ namespace neam
           using utility = typename ct::list::extract<AttachedObjectsList>::template as<attached_object_utility_t>;
 
           utility::check();
+          typename utility::shared_locker _sl{*this};
+          std::lock_guard _l(_sl);
 
           // get the vector with the less attached objects
           const type_t attached_object_id = utility::get_min_entry_count(*this);
@@ -371,20 +467,23 @@ namespace neam
           {
             for (auto& it : attached_object_db[attached_object_id].db)
             {
-              if (mask.match(it->owner.mask))
+              if (it != nullptr && mask.match(it->owner.mask))
               {
+                std::lock_guard _lg(spinlock_shared_adapter::adapt(it->owner.lock));
                 utility::call(func, *this, it->owner);
               }
             }
           }
-          else
+          else if constexpr(DatabaseConf::use_entity_db)
           {
-            for (uint32_t i = 0; i < get_entity_count(); ++i)
+            const uint32_t count = get_entity_count();
+            for (uint32_t i = 0; i < count; ++i)
             {
-              entity_data_t& data = get_entity(i);
-              if (mask.match(data.mask))
+              entity_data_t* data = get_entity(i);
+              if (data != nullptr && mask.match(data->mask))
               {
-                utility::call(func, *this, data);
+                std::lock_guard _lg(spinlock_shared_adapter::adapt(data->lock));
+                utility::call(func, *this, *data);
               }
             }
           }
@@ -396,6 +495,8 @@ namespace neam
           using utility = typename ct::list::extract<AttachedObjectsList>::template as<attached_object_utility_t>;
 
           utility::check();
+          typename utility::shared_locker _sl{*this};
+          std::lock_guard _l(_sl);
 
           // get the vector with the less attached objects
           const type_t attached_object_id = utility::get_min_entry_count(*this);
@@ -406,56 +507,65 @@ namespace neam
           // for each !
           if constexpr(DatabaseConf::use_attached_object_db)
           {
-            for (auto& it : attached_object_db[attached_object_id])
+            for (auto it : attached_object_db[attached_object_id])
             {
-              if (mask.match(it->owner.mask))
+              if (it != nullptr && mask.match(it->owner.mask))
               {
+                std::lock_guard _lg(spinlock_shared_adapter::adapt(it->owner.lock));
                 utility::call(func, *this, it->owner);
               }
             }
           }
-          else
+          else if constexpr (DatabaseConf::use_entity_db)
           {
-            for (uint32_t i = 0; i < get_entity_count(); ++i)
+            const uint32_t count = get_entity_count();
+            for (uint32_t i = 0; i < count; ++i)
             {
-              entity_data_t& data = get_entity(i);
-              if (mask.match(data.mask))
+              const entity_data_t* data = get_entity(i);
+              if (data != nullptr && mask.match(data->mask))
               {
-                utility::call(func, *this, data);
+                std::lock_guard _lg(spinlock_shared_adapter::adapt(data->lock));
+                utility::call(func, *this, *data);
               }
             }
           }
-
         }
 
       private:
         template<typename AttachedObject>
         bool entity_has(const entity_data_t& data) const
         {
-          const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id;
-          return data.mask.is_set(id);
+          return data.template has<AttachedObject>();
         }
 
         template<typename AttachedObject>
         AttachedObject* entity_get(entity_data_t& data)
         {
-          return data.template get<AttachedObject>();
+          if (!data.template has<AttachedObject>())
+            return nullptr;
+          return data.template slow_get<AttachedObject>();
         }
 
         template<typename AttachedObject>
         const AttachedObject* entity_get(const entity_data_t& data) const
         {
-          return data.template get<AttachedObject>();
+          if (!data.template has<AttachedObject>())
+            return nullptr;
+          return data.template slow_get<AttachedObject>();
         }
 
-        entity_data_t& get_entity(size_t index)
+        entity_data_t* get_entity(size_t index)
         {
-          return *entity_list[index];
+          static_assert(DatabaseConf::use_entity_db, "cannot call get_entity when entity-db is disabled");
+
+          return entity_list[index];
         }
 
-        const entity_data_t& get_entity(size_t index) const
+        const entity_data_t* get_entity(size_t index) const
         {
-          return *entity_list[index];
+          static_assert(DatabaseConf::use_entity_db, "cannot call get_entity when entity-db is disabled");
+
+          return entity_list[index];
         }
 
         base_t* get_attached_object(size_t index, type_t id)
@@ -516,75 +626,49 @@ namespace neam
 
         void remove_entity(entity_data_t& data)
         {
-#ifdef ENFIELD_ENABLE_DEBUG_CHECKS
+#if ENFIELD_ENABLE_DEBUG_CHECKS
           data.assert_valid();
 #endif
-          // loop over all "hard-added" attached objects in order to remove them
-          // as after this pass every "soft-added" attached objects (views, requested, ...) should all be removed, unless cycles exist
-          std::vector<base_t*> to_remove;
-          for (auto& it : data.attached_objects)
           {
-            if (it.second->user_added)
-              to_remove.push_back(it.second);
+            if constexpr(DatabaseConf::allow_ref_counting_on_entities)
+            {
+              check::debug::n_assert(data.counter.load(std::memory_order_acquire) == 0, "Trying to remove an entity while there's still hard-refs on it");
+            }
+            std::lock_guard _lg{spinlock_exclusive_adapter::adapt(data.lock)};
+            // loop over all "hard-added" attached objects in order to remove them
+            // as after this pass every "soft-added" attached objects (views, requested, ...) should all be removed, unless cycles exist
+            std::vector<base_t*> to_remove;
+            for (auto& it : data.attached_objects)
+            {
+              if (it.second->externally_added)
+                to_remove.push_back(it.second);
+            }
+            for (auto* it : to_remove)
+            {
+              it->externally_added = false;
+              if (it->can_be_destructed())
+                _delete_ao(*it, data);
+            }
+
+            // remove the entity from the list
+            if constexpr(DatabaseConf::use_entity_db)
+            {
+              std::lock_guard _lg(spinlock_exclusive_adapter::adapt(entity_list_lock));
+              check::debug::n_assert(entity_list[data.index].get() == &data, "Trying to remove and entity from a different DB");
+              entity_list[data.index]._drop(); // simply assign the pointer to nullptr
+            }
+            entity_deletion_count.fetch_add(1, std::memory_order_release);
+
+            // This error mostly tells you that you have dependency cycles in your attached objects.
+            // You can put a breakpoint here and look at what is inside the attached_objects vector.
+            //
+            // This isn't toggled by ENFIELD_ENABLE_DEBUG_CHECKS because it's a breaking error. It won't produce any code in "super-release" builds
+            // where n_assert will just expand to a dummy, but stil, if that error appears this means that some of your attached objects are wrongly created.
+            check::debug::n_assert(data.attached_objects.empty(), "There's still attached objects on an entity while trying to destroy it (do you have dependency cycles ?)");
           }
-          for (auto& it : to_remove)
-            remove_ao_user(data, *it);
-
-
-          // remove the entity from the list
-          {
-            std::lock_guard<spinlock> _lg(entity_list_lock);
-            check::debug::n_assert(entity_list[data.index] == &data, "Trying to remove and entity from a different DB");
-            entity_list.back()->index = data.index;
-            entity_list[data.index] = entity_list.back();
-            entity_list.pop_back();
-          }
-          entity_deletion_count.fetch_add(1, std::memory_order_release);
-
-          // This error mostly tells you that you have dependency cycles in your attached objects.
-          // You can put a breakpoint here and look at what is inside the attached_objects vector.
-          //
-          // This isn't toggled by ENFIELD_ENABLE_DEBUG_CHECKS because it's a breaking error. It won't produce any code in "super-release" builds
-          // where n_assert will just expand to a dummy, but stil, if that error appears this means that some of your attached objects are wrongly created.
-          check::debug::n_assert(data.attached_objects.empty(), "There's still attached objects on an entity while trying to destroy it (do you have dependency cycles ?)");
-
           // free the memory
           data.~entity_data_t();
           entity_data_pool.deallocate(&data);
-        }
-
-        template<typename AttachedObject, typename... DataProvider>
-        AttachedObject& add_ao_user(entity_data_t& data, attached_object::creation_flags flags, DataProvider&& ...provider)
-        {
-          AttachedObject& ret = _create_ao<AttachedObject>(data, flags, std::forward<DataProvider>(provider)...);
-          base_t* bptr = &ret;
-          check::debug::n_assert(bptr != (base_t*)(k_poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
-          bptr->user_added = true;
-          return ret;
-        }
-
-        template<typename AttachedObject, typename... DataProvider>
-        AttachedObject& add_ao_dep(entity_data_t& data, attached_object::creation_flags flags, base_t& requester, DataProvider&& ... provider)
-        {
-          const type_t id = type_id<AttachedObject, typename DatabaseConf::attached_object_type>::id();
-
-          base_t* bptr;
-          if (data.has(id))
-          {
-            // it already exists
-            bptr = data.get(id);
-            check::debug::n_assert(bptr != (base_t*)(k_poisoned_pointer), "The attached object required is being constructed (circular dependency ?)");
-          }
-          else
-          {
-            // create it
-            bptr = &_create_ao<AttachedObject>(data, flags, std::forward<DataProvider>(provider)...);
-          }
-
-          bptr->required_count += 1;
-          requester.requirements.set(id);
-          AttachedObject& ret = *static_cast<AttachedObject*>(bptr);
-          return ret;
         }
 
         template<typename AttachedObject, typename... DataProvider>
@@ -592,6 +676,9 @@ namespace neam
                                    attached_object::creation_flags flags,
                                    DataProvider&& ... provider)
         {
+#if N_ENABLE_LOCK_DEBUG
+          check::debug::n_assert(data.lock._debug_is_exclusive_lock_held_by_current_thread(), "database::_create_ao: expecting exclusive lock to be held by current thread");
+#endif
           if (flags == attached_object::creation_flags::none)
             flags = AttachedObject::default_creation_flags;
 
@@ -624,7 +711,7 @@ namespace neam
               if (ptr->force_immediate_db_change)
               {
                 // force immediate changes. slow.
-                std::lock_guard<spinlock> _lg(attached_object_db[object_type_id].lock);
+                std::lock_guard _lg(spinlock_exclusive_adapter::adapt(attached_object_db[object_type_id].lock));
                 add_to_attached_db(*ptr);
               }
               else
@@ -637,57 +724,11 @@ namespace neam
           return *ptr;
         }
 
-        /// \note This remove path is the user-requested path
-        void remove_ao_user(entity_data_t& data, base_t& base)
-        {
-          check::debug::n_assert(base.user_added, "Invalid usage of remove_ao_user(): attached object is not user-added");
-
-          base.user_added = false;
-          if (base.required_count > 0)
-            return;
-
-          _delete_ao(base, data);
-        }
-
-        /// \note This remove path is the dependency path
-        void remove_ao_dep(base_t& base, entity_data_t& data, base_t& requester)
-        {
-          check::debug::n_assert(&base != (base_t*)(k_poisoned_pointer), "The attached object being removed is also being constructed");
-          {
-            check::debug::n_assert(requester.requirements.is_set(base.object_type_id), "remove_ao_dep() is wrongly used (requester did not require<> the ao)");
-            check::debug::n_assert(!base.requirements.is_set(requester.object_type_id), "remove_ao_dep(): circular dependency found");
-            requester.requirements.unset(base.object_type_id);
-          }
-
-          --base.required_count;
-
-          if (base.required_count > 0)
-            return;
-          if (base.user_added)
-            return;
-
-          _delete_ao(base, data);
-        }
-
-        void cleanup_ao_dependencies(base_t& base, entity_data_t& data)
-        {
-          for (uint32_t i = 0; i <  data.attached_objects.size();)
-          {
-            auto& it = data.attached_objects[i];
-            if (base.requirements.is_set(it.first))
-            {
-              check::debug::n_assert(!it.second->authorized_destruction, "Dependency cycle detected when trying to remove an attached object");
-              if (!it.second->authorized_destruction)
-                remove_ao_dep(*it.second, data, base);
-
-              continue;
-            }
-            ++i;
-          }
-        }
-
         void _delete_ao(base_t& base, entity_data_t& data)
         {
+#if N_ENABLE_LOCK_DEBUG
+          check::debug::n_assert(data.lock._debug_is_exclusive_lock_held_by_current_thread(), "database::_delete_ao: expecting exclusive lock to be held by current thread");
+#endif
           base.authorized_destruction = true;
 
           data.remove_attached_object(base.object_type_id);
@@ -696,6 +737,7 @@ namespace neam
           data.mask.unset(base.object_type_id);
 
           // destruct (always, to keep the nice C++ resource management pattern and avoid nasty surprises)
+          // must be after the remove/unset
           base.~base_t();
 
           // only when supported by the configuration.
@@ -705,17 +747,21 @@ namespace neam
           {
             if (!base.fully_transient_attached_object)
             {
-              add_to_pending_change_db(base);
+              std::lock_guard _lg(spinlock_shared_adapter::adapt(attached_object_db[base.object_type_id].lock));
+              remove_from_attached_db(base);
+              //add_to_pending_change_db(base);
             }
             else
             {
               // we got a fully transient object, no need for anything else
-              allocator.deallocate(base.object_type_id, &base);
+              auto& allocator_info = type_registry<DatabaseConf>::allocator_info();
+              allocator.deallocate(true, base.object_type_id, allocator_info[base.object_type_id].size, allocator_info[base.object_type_id].alignment, &base);
             }
           }
           else
           {
-            allocator.deallocate(base.fully_transient_attached_object, base.object_type_id, &base);
+              auto& allocator_info = type_registry<DatabaseConf>::allocator_info();
+            allocator.deallocate(base.fully_transient_attached_object, base.object_type_id, allocator_info[base.object_type_id].size, allocator_info[base.object_type_id].alignment, &base);
           }
         }
 
@@ -727,46 +773,13 @@ namespace neam
             return;
           }
 
-          thread_local uint32_t pending_change_db_index = (uint32_t)(reinterpret_cast<uint64_t>(&base) >> 3); // all pointers are aligned to 8
-
           if (base.authorized_destruction && !base.in_attached_object_db)
-          {
-            // doing this here is a tiny tiny bit faster:
-            // (also, the attached object should have been marked as transient)
-            uint32_t db_index = base.index & (~0u);
-            uint32_t index = base.index >> 32;
-
-            {
-              std::lock_guard<spinlock> _lg(pending_change_db[db_index].lock);
-              check::debug::n_assert(pending_change_db[db_index].db[index] == &base, "Invalid db state");
-              pending_change_db[db_index].db[index] = nullptr;
-
-              // we can destroy the object as it isn't present in the db, so queries cannot reference it
-              DatabaseConf::attached_object_allocator::deallocate(base.object_type_id, &base);
-            }
             return;
-          }
 
-          while (true)
-          {
-            pending_change_db_index = (pending_change_db_index + 1) % k_change_db_size;
-
-            if (pending_change_db[pending_change_db_index].lock.try_lock())
-            {
-              std::lock_guard<spinlock> _lg(pending_change_db[pending_change_db_index].lock, std::adopt_lock);
-              // we are already in the db
-              if (!base.authorized_destruction)
-              {
-                base.in_attached_object_db = false;
-                base.index = pending_change_db[pending_change_db_index].db.size() << 32 | pending_change_db_index;
-              }
-              pending_change_db[pending_change_db_index].db.push_back(&base);
-              return;
-            }
-          }
+          pending_attached_object_changes.push_back(&base);
         }
 
-        // NOTE: lock must be held
+        // NOTE: lock (exclusive) must be held
         void add_to_attached_db(base_t& base)
         {
           if constexpr(!DatabaseConf::use_attached_object_db)
@@ -785,7 +798,7 @@ namespace neam
           attached_object_db[base.object_type_id].db.push_back(&base);
         }
 
-        // NOTE: lock must be held
+        // NOTE: lock (shared or exclusive) must be held
         void remove_from_attached_db(base_t& base)
         {
           if constexpr(!DatabaseConf::use_attached_object_db)
@@ -798,16 +811,15 @@ namespace neam
 
           if (base.in_attached_object_db)
           {
-            check::debug::n_assert(attached_object_db[base.object_type_id].db[base.index] == &base, "Incoherent DB state");
+            check::debug::n_assert(attached_object_db[base.object_type_id].db[base.index].get() == &base, "Incoherent DB state");
 
             attached_object_db[base.object_type_id].deletion_count.fetch_add(1, std::memory_order_release);
 
-            attached_object_db[base.object_type_id].db.back()->index = base.index;
-            attached_object_db[base.object_type_id].db[base.index] = attached_object_db[base.object_type_id].db.back();
-            attached_object_db[base.object_type_id].db.pop_back();
+            attached_object_db[base.object_type_id].db[base.index]._drop();
           }
 
-          DatabaseConf::attached_object_allocator::deallocate(base.object_type_id, &base);
+          auto& allocator_info = type_registry<DatabaseConf>::allocator_info();
+          allocator.deallocate(base.fully_transient_attached_object, base.object_type_id, allocator_info[base.object_type_id].size, allocator_info[base.object_type_id].alignment, &base);
         }
 
       private:
@@ -816,24 +828,22 @@ namespace neam
         static constexpr uint32_t k_attached_object_db_size = DatabaseConf::use_attached_object_db ? DatabaseConf::max_attached_objects_types : 0;
         attached_object_db_t attached_object_db[k_attached_object_db_size];
 
-        static constexpr uint32_t k_change_db_size = DatabaseConf::use_attached_object_db ? 8 : 0;
-        // contains both pending addition and deletion, used to avoid as much as possible lock contention
-        // increasing the entry count might help with higher thread count CPUs in case contention is still to important
-        // removing the for-each/queries support completly remove the need 
-        attached_object_db_t pending_change_db[k_change_db_size];
+        cr::queue_ts<cr::queue_ts_atomic_wrapper<base_t*>> pending_attached_object_changes;
 
         static constexpr uint32_t k_deletion_count_to_optimize = 1024;
 
         // deletion is the trigger point for re-arranging the array
+        // entity_list usage is controlled by dbconf::use_entity_db
         std::atomic<uint32_t> entity_deletion_count;
-        spinlock entity_list_lock;
-        std::deque<entity_data_t*> entity_list;
+        mutable shared_spinlock entity_list_lock;
+        std::deque<cr::raw_ptr<entity_data_t>> entity_list;
 
         neam::cr::memory_pool<entity_data_t> entity_data_pool;
 
         typename DatabaseConf::attached_object_allocator allocator;
 
         friend class entity<DatabaseConf>;
+        friend class entity_weak_ref<DatabaseConf>;
         friend class attached_object::base<DatabaseConf>;
         template<typename DBC, typename AttachedObjectClass, typename FC, attached_object::creation_flags>
         friend class attached_object::base_tpl;
@@ -847,5 +857,5 @@ namespace neam
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_3158130790807728943_2877410136_DATABASE_HPP__
+
 

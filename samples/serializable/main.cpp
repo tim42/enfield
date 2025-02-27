@@ -37,14 +37,7 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private serializa
     {
       // unserialize the data member. This effectively performs an assignation.
       if (has_persistent_data())
-      {
         refresh_from_deserialization();
-      }
-    }
-
-    void refresh_from_deserialization()
-    {
-        data = get_persistent_data();
     }
 
     /// \brief Print a message
@@ -60,6 +53,10 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private serializa
     std::map<int, int> data;
 
   private: // keep the public interface clean
+    void refresh_from_deserialization()
+    {
+        data = get_persistent_data();
+    }
     /// \brief Return the data. Can be anything that can be serialized by persistence.
     const std::map<int, int> &get_data_to_serialize() const
     {
@@ -70,7 +67,7 @@ class truc2 : public neam::enfield::component<db_conf, truc2>, private serializa
 };
 
 /// \brief Another component + a concept provider, this time the component itself is serializable (which makes things easier)
-/// The component is auto-serializable, without any input from the user
+/// The component is auto-serializable, without any external input
 struct truc : public neam::enfield::component<db_conf, truc>,
               private serializable::concept_provider<truc>,
               private printable::concept_provider<truc>
@@ -114,8 +111,8 @@ N_METADATA_STRUCT(truc)
 
 int main(int, char **)
 {
-  neam::cr::out.min_severity = neam::cr::logger::severity::debug;
-  neam::cr::out.register_callback(neam::cr::print_log_to_console, nullptr);
+  neam::cr::get_global_logger().min_severity = neam::cr::logger::severity::debug;
+  neam::cr::get_global_logger().register_callback(neam::cr::print_log_to_console, nullptr);
 
   neam::enfield::database<db_conf> db;
   auto entity = db.create_entity();
@@ -135,7 +132,7 @@ int main(int, char **)
   entity.get<printable>()->print();
 
   neam::raw_data serialized_data;
-  db.for_each([&serialized_data, &db](serializable &s)
+  db.for_each([&serialized_data](serializable &s)
   {
     neam::rle::status st;
     serialized_data = s.serialize(st);

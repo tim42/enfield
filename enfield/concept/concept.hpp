@@ -27,8 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_473723811246623694_2897013755_CONCEPT_HPP__
-#define __N_473723811246623694_2897013755_CONCEPT_HPP__
+#pragma once
+
 
 #include <vector>
 #include <algorithm>
@@ -45,14 +45,10 @@ namespace neam
     /// \tparam DatabaseConf is the configuration object for the database
     /// \tparam ConceptType is the final concept type
     ///
-    /// Concepts are a powerfull yet not-trivial thing to understand. There are concepts in the samples,
-    /// but here is a small explanation of the concept pattern (and what enfield asks):
-    /// your concept class (say my_concept) inherit from base_concept,
-    /// my_concept have to declare/define:
-    ///   - a class concept_logic that inherit from base_concept<...>::base_concept_logic
-    ///   - a templated class concept_provider (CRTP) which inherit from your concept_logic class
-    /// The concept_logic class defines the communication interface from the concept provider (the class that inherit from your concept_provider class) and my_concept,
-    /// it should not be used to constrain the concept provider to have a specific API as your concept_provider knows the exact type of the concept provider. (use get_base_as < ConceptProvider > ())
+    /// Concepts are a core... concept... in enfield. They provide a way to abstract components and perform one-to-many broadcast operations on compatible components in an entity.
+    /// The core utility of a concept is the same core utility an abstract class may have in C++
+    /// Please refer to the concepts provided in the samples on the proper way to implement / use them.
+    /// \note The proper way to provide concepts is via CRTP so as to encapsulate the boilerplate in the parent class
     template<typename DatabaseConf, typename ConceptType>
     class ecs_concept : public attached_object::base_tpl<DatabaseConf, typename DatabaseConf::concept_class, ConceptType, attached_object::creation_flags::force_immediate_changes>
     {
@@ -79,8 +75,9 @@ namespace neam
             }
 
           protected:
-            base_concept_logic(base_t& _base)
-              : ecs_concept(ecs_concept::create_self(_base)), base(_base)
+            template<typename... Types>
+            base_concept_logic(base_t& _base, Types&&... types)
+              : ecs_concept(ecs_concept::create_self(_base, std::forward<Types>(types)...)), base(_base)
             {
               ecs_concept.concept_providers.push_back(this);
             }
@@ -106,6 +103,7 @@ namespace neam
           private:
             ConceptType& ecs_concept;
             base_t& base;
+            friend ConceptType;
         };
 
       protected:
@@ -155,10 +153,10 @@ namespace neam
         }
 
       private:
-        std::vector<base_concept_logic*> concept_providers;
+        std::mtc_vector<base_concept_logic*> concept_providers;
     };
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_473723811246623694_2897013755_CONCEPT_HPP__
+
 

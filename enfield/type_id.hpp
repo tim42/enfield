@@ -27,8 +27,7 @@
 // SOFTWARE.
 //
 
-#ifndef __N_3139214210286304272_324738490_COMPONENT_TYPE_HPP__
-#define __N_3139214210286304272_324738490_COMPONENT_TYPE_HPP__
+#pragma once
 
 #include <cstdint>
 
@@ -47,9 +46,9 @@ namespace neam
           /// \brief Return the next id
           static type_t get_next_id()
           {
-            static type_t counter = 1;
+            static type_t counter = 0;
 //             check::debug::n_assert(counter != 0, "neam::enfield::type_id<>: more than 2^{} type identifiers have been generated", sizeof(type_t) * 8);
-            return ++counter;
+            return counter++;
           }
       };
     } // namespace internal
@@ -72,6 +71,4 @@ namespace neam
     using generic_type_id = type_id<Type, void>;
   } // namespace enfield
 } // namespace neam
-
-#endif // __N_3139214210286304272_324738490_COMPONENT_TYPE_HPP__
 

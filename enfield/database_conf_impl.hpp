@@ -27,8 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_29971207821198319885_3199732385_DATABASE_CONF_IMPL_HPP__
-#define __N_29971207821198319885_3199732385_DATABASE_CONF_IMPL_HPP__
+#pragma once
+
 
 #include "database_conf.hpp"
 #include "enfield_types.hpp"
@@ -103,7 +103,10 @@ namespace neam
           /// for-each is a bit slower (overhead) when the matching entity count is low ( < 20% of the database)
           /// Attached Object creation and suppression and optimize() is much much faster
           /// If your data is very dynamic, should be false.
-          static constexpr bool use_attached_object_db = false;
+          static constexpr bool use_attached_object_db = true;
+          static constexpr bool use_entity_db = true;
+
+          static constexpr bool allow_ref_counting_on_entities = true;
       };
       template<>
       struct eccs::class_rights<eccs::concept_class::id>
@@ -111,7 +114,7 @@ namespace neam
         // specific configuration: (must be static constexpr)
 
         /// \brief Define general access rights
-        static constexpr attached_object_access access = attached_object_access::automanaged | attached_object_access::ao_unsafe_getable | attached_object_access::user_getable;
+        static constexpr attached_object_access access = attached_object_access::automanaged | attached_object_access::ao_unsafe_getable | attached_object_access::ext_getable | attached_object_access::db_queryable;
       };
 
       using enfield_default = eccs;
@@ -163,7 +166,10 @@ namespace neam
           /// for-each is a bit slower (overhead) when the matching entity count is low ( < 20% of the database)
           /// Attached Object creation and suppression and optimize() is much much faster
           /// If your data is very dynamic, should be false.
-          static constexpr bool use_attached_object_db = false;
+          static constexpr bool use_attached_object_db = true;
+          static constexpr bool use_entity_db = true;
+
+          static constexpr bool allow_ref_counting_on_entities = true;
       };
       template<>
       struct conservative_eccs::class_rights<conservative_eccs::concept_class::id>
@@ -171,7 +177,7 @@ namespace neam
         // specific configuration: (must be static constexpr)
 
         /// \brief Define general access rights
-        static constexpr attached_object_access access = attached_object_access::automanaged | attached_object_access::ao_unsafe_getable | attached_object_access::user_getable;
+        static constexpr attached_object_access access = attached_object_access::automanaged | attached_object_access::ao_unsafe_getable | attached_object_access::ext_getable | attached_object_access::db_queryable;
       };
       template<>
       struct conservative_eccs::specific_class_rights<conservative_eccs::component_class::id, conservative_eccs::concept_class::id>
@@ -225,11 +231,14 @@ namespace neam
           /// for-each is a bit slower (overhead) when the matching entity count is low ( < 20% of the database)
           /// Attached Object creation and suppression and optimize() is much much faster
           /// If your data is very dynamic, should be false.
-          static constexpr bool use_attached_object_db = false;
+          static constexpr bool use_attached_object_db = true;
+          static constexpr bool use_entity_db = true;
+
+          static constexpr bool allow_ref_counting_on_entities = true;
       };
     } // namespace db_conf
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_29971207821198319885_3199732385_DATABASE_CONF_IMPL_HPP__
+
 

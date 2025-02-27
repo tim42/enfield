@@ -26,12 +26,12 @@
 
 #pragma once
 
-#include <vector>
 #include <string>
 
 #include "type_id.hpp"
 
 #include <ntools/type_id.hpp>
+#include <ntools/mt_check/vector.hpp>
 
 namespace neam::enfield
 {
@@ -47,9 +47,9 @@ namespace neam::enfield
 
     struct allocator_info_t
     {
-      type_t id;
-      size_t size;
-      size_t alignment;
+      type_t id = ~(type_t)0;
+      size_t size = 0;
+      size_t alignment = 0;
     };
 
     struct debug_info_t
@@ -62,18 +62,24 @@ namespace neam::enfield
     static void add_type()
     {
       const type_t object_type_id = type_id<Type, typename DatabaseConf::attached_object_type>::id();
-      allocator_info().push_back({object_type_id, sizeof(Type), alignof(Type)});
-      debug_info().push_back({object_type_id, ct::type_name<Type>.str});
+      check::debug::n_assert(object_type_id < DatabaseConf::max_attached_objects_types, "neam::enfield::type_registry::add_type: type-id is too big", sizeof(type_t) * 8);
+      if ((type_t)allocator_info().size() < object_type_id + 1)
+      {
+        allocator_info().resize(object_type_id + 1);
+        debug_info().resize(object_type_id + 1);
+      }
+      allocator_info()[object_type_id] = {object_type_id, sizeof(Type), alignof(Type)};
+      debug_info()[object_type_id] = {object_type_id, ct::type_name<Type>.str};
     }
 
     static auto& allocator_info()
     {
-      static std::vector<allocator_info_t> _info;
+      static std::mtc_vector<allocator_info_t> _info;
       return _info;
     }
     static auto& debug_info()
     {
-      static std::vector<debug_info_t> _info;
+      static std::mtc_vector<debug_info_t> _info;
       return _info;
     }
 

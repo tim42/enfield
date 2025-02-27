@@ -6,7 +6,6 @@ add_executable(${SAMPLE_NAME} main.cpp)
 
 target_compile_options(${SAMPLE_NAME} PRIVATE ${PROJECT_CXX_FLAGS})
 
-
 target_include_directories(${SAMPLE_NAME} PRIVATE SYSTEM ntools)
 target_include_directories(${SAMPLE_NAME} PRIVATE SYSTEM fmt)
 target_include_directories(${SAMPLE_NAME} PRIVATE SYSTEM enfield)

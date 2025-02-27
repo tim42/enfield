@@ -27,8 +27,7 @@
 // SOFTWARE.
 //
 
-#ifndef __N_2187426866142131074_2264321372_ENFIELD_TYPES_HPP__
-#define __N_2187426866142131074_2264321372_ENFIELD_TYPES_HPP__
+#pragma once
 
 #include <cstdint>
 #include <cstddef>
@@ -72,5 +71,4 @@ namespace neam
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_2187426866142131074_2264321372_ENFIELD_TYPES_HPP__
 

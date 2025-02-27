@@ -27,8 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_24947127962899119538_2330222174_DATABASE_CONF_HPP__
-#define __N_24947127962899119538_2330222174_DATABASE_CONF_HPP__
+#pragma once
+
 
 #include "enfield_types.hpp"
 
@@ -71,24 +71,27 @@ namespace neam
       /// \brief grant all "safe" rights to other attached objects
       ao_all_safe = ao_requireable | ao_removable,
 
-      /// \brief Can the user (user = public API of the entity) create an attached object of that class ?
-      user_creatable =      1 << 8,
-      /// \brief Can the user (user = public API of the entity) get an attached object of that class ?
-      /// \note This allows the user to perform queries.
-      user_getable =        1 << 9,
-      /// \brief Can the user (user = public API of the entity) remove an attached object of that class ?
-      user_removable =      1 << 10,
+      /// \brief Can the attached object be created by an external source (external = using public API of the entity)
+      ext_creatable =      1 << 8,
+      /// \brief Can the attached object be retrieved by an external source (external = using public API of the entity)
+      ext_getable =        1 << 9,
+      /// \brief Can the attached object be removed by an external source (external = using public API of the entity)
+      ext_removable =      1 << 10,
+      /// Allows for the use of queries/for-each/systems.
+      /// \note this flag has a perf implication as the database has to maintain a collection of entries for queries
+      ///       components without this flag can be created much faster
+      db_queryable =       1 << 11,
 
-      /// \brief grant all rights to the user
-      user_all = user_creatable | user_getable | user_removable,
+      /// \brief grant all rights to external sources
+      ext_all = ext_creatable | ext_getable | ext_removable,
 
       /// \brief Grant all rights to everybody
-      all = ao_all | user_all | automanaged,
-      all_no_automanaged = ao_all | user_all,
+      all = ao_all | ext_all | automanaged | db_queryable,
+      all_no_automanaged = ao_all | ext_all | db_queryable,
 
       /// \brief Grant all safe rights to everybody
-      all_safe = ao_all_safe | user_all | automanaged,
-      all_safe_no_automanaged = ao_all_safe | user_all,
+      all_safe = ao_all_safe | ext_all | automanaged | db_queryable,
+      all_safe_no_automanaged = ao_all_safe | ext_all | db_queryable,
     };
     inline constexpr attached_object_access operator | (attached_object_access a, attached_object_access b) { return static_cast<attached_object_access>((int)a | (int)b); }
     inline constexpr attached_object_access operator & (attached_object_access a, attached_object_access b) { return static_cast<attached_object_access>((int)a & (int)b); }
@@ -121,7 +124,7 @@ namespace neam
       }
 
       /// \brief Deallocate an object
-      void deallocate(bool transient, type_t type_id, void* ptr)
+      void deallocate(bool transient, type_t type_id, size_t /*size*/, size_t /*align*/, void* ptr)
       {
         return (transient ? transient_pools : pools)[type_id].deallocate(ptr);
       }
@@ -145,9 +148,9 @@ namespace neam
       }
 
       /// \brief Deallocate an object
-      static void deallocate(bool /*transient*/, type_t /*type_id*/, void* ptr)
+      static void deallocate(bool /*transient*/, type_t /*type_id*/, size_t size, size_t align, void* ptr)
       {
-        operator delete(ptr);
+        operator delete(ptr, size, std::align_val_t(align));
       }
     };
 
@@ -250,5 +253,5 @@ namespace neam
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_24947127962899119538_2330222174_DATABASE_CONF_HPP__
+
 

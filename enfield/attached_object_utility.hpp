@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <mutex>
 #include "enfield_types.hpp"
 #include "mask.hpp"
 
@@ -37,7 +38,7 @@ namespace neam::enfield
     static constexpr void check()
     {
       (static_assert_check_attached_object<DatabaseConf, AttachedObjects>(), ...);
-      (static_assert_can<DatabaseConf, AttachedObjects, attached_object_access::user_getable>(), ...);
+      (static_assert_can<DatabaseConf, AttachedObjects, attached_object_access::db_queryable>(), ...);
     }
     using database_t = database<DatabaseConf>;
     using entity_t = entity<DatabaseConf>;
@@ -59,6 +60,36 @@ namespace neam::enfield
       );
       return attached_object_id;
     }
+
+    static void lock_shared(const database_t& db)
+    {
+      if constexpr (sizeof...(AttachedObjects) > 1)
+      {
+        std::lock(spinlock_shared_adapter::adapt(db.attached_object_db[id_t<AttachedObjects>::id()].lock)...);
+      }
+      else
+      {
+        // we have just a single entry:
+        (db.attached_object_db[id_t<AttachedObjects>::id()].lock.lock_shared(), ...);
+      }
+    }
+
+    static void unlock_shared(const database_t& db)
+    {
+      ((db.attached_object_db[id_t<AttachedObjects>::id()].lock.unlock_shared()), ...);
+    }
+    struct shared_locker
+    {
+      void lock()
+      {
+        lock_shared(db);
+      }
+      void unlock()
+      {
+        unlock_shared(db);
+      }
+      const database_t& db;
+    };
 
     static inline_mask<DatabaseConf> make_mask()
     {

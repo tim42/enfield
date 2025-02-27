@@ -27,8 +27,7 @@
 // SOFTWARE.
 //
 
-#ifndef __N_7721205361892716324_793230972_COMPONENTS_HPP__
-#define __N_7721205361892716324_793230972_COMPONENTS_HPP__
+#pragma once
 
 #include "enfield/enfield.hpp"
 
@@ -69,8 +68,10 @@ namespace sample
     private:
       void update()
       {
+        data += data * data | 5;
       }
 
+      uint64_t data = 1;
       friend auto_updatable_t;
   };
 
@@ -85,30 +86,34 @@ namespace sample
       {
       }
 
-    private:
       void update()
       {
         // some bit of math:
         comp.data += comp.data * comp.data | 5;
-
+// return;
         //if ((comp.data & (1 << 23)))
-        {
-          if (is_required<comp_1b>())
-            unrequire<comp_1b>();
-          else if (!is_required<comp_1b>())
-            require<comp_1b>();
-        }
-
-        if (is_required<comp_3>())
-          unrequire<comp_3>();
-        else
-          require<comp_3>();
+        // {
+        //   if (is_required<comp_1b>())
+        //     unrequire<comp_1b>();
+        //   else
+        //     require<comp_1b>();
+        // }
+        //
+        // if (is_required<comp_1>())
+        //   unrequire<comp_1>();
+        // else
+        //   require<comp_1>();
+        //
+        // if (is_required<comp_3>())
+        //   unrequire<comp_3>();
+        // else
+        //   require<comp_3>();
       }
 
+    private:
       comp_1 &comp = require<comp_1>();
       friend auto_updatable_t;
   };
 } // namespace sample
 
-#endif // __N_7721205361892716324_793230972_COMPONENTS_HPP__
 

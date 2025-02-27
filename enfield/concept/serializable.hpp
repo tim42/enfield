@@ -42,7 +42,7 @@ namespace neam::enfield::concepts
   {
     struct serialized_entity
     {
-      std::vector<uint64_t> user_added_components;
+      std::vector<uint64_t> externally_added_components;
       std::map<uint64_t, raw_data> serialized_components;
     };
   }
@@ -80,7 +80,7 @@ namespace neam::enfield::concepts
           virtual void _do_remove(entity<DatabaseConf>& entity) = 0;
 
         private:
-          bool _is_user_added() const { return this->get_base().is_user_added(); }
+          bool _is_externally_added() const { return this->get_base().is_externally_added(); }
 
           friend class serializable<DatabaseConf>;
       };
@@ -251,13 +251,13 @@ namespace neam::enfield::concepts
         internal::serialized_entity serialized_data;
         for (size_t i = 0; i < this->get_concept_providers_count(); ++i)
         {
-          if (this->get_concept_provider(i)._is_user_added())
+          if (this->get_concept_provider(i)._is_externally_added())
           {
-            serialized_data.user_added_components.push_back(this->get_concept_provider(i)._get_type_hash());
+            serialized_data.externally_added_components.push_back(this->get_concept_provider(i)._get_type_hash());
           }
         }
 
-        if (serialized_data.user_added_components.empty())
+        if (serialized_data.externally_added_components.empty())
         {
           st = rle::status::failure;
           return {};
@@ -305,7 +305,7 @@ namespace neam::enfield::concepts
         });
 
         persistent_data = &serialized_entity;
-        for (uint64_t it : serialized_entity.user_added_components)
+        for (uint64_t it : serialized_entity.externally_added_components)
         {
           auto pao = present_attached_objects.find(it);
           if (pao != present_attached_objects.end())
@@ -364,7 +364,7 @@ N_METADATA_STRUCT(neam::enfield::concepts::internal::serialized_entity)
 {
   using member_list = neam::ct::type_list
   <
-    N_MEMBER_DEF(user_added_components),
+    N_MEMBER_DEF(externally_added_components),
     N_MEMBER_DEF(serialized_components)
   >;
 };

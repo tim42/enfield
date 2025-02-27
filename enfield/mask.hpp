@@ -28,6 +28,7 @@
 
 #include "type_registry.hpp"
 
+#include <ntools/raw_ptr.hpp>
 #include <ntools/raw_memory_pool_ts.hpp>
 
 namespace neam::enfield
@@ -113,7 +114,7 @@ namespace neam::enfield
     delayed_mask() = default;
     ~delayed_mask()
     {
-      mask_pool.deallocate(mask);
+      mask_pool.deallocate(mask.release());
     }
 
     void init()
@@ -124,6 +125,8 @@ namespace neam::enfield
         mask[j] = 0;
       }
     }
+
+    bool has_mask() const { return mask; }
 
     // perform (*this & other) == *this
     bool match(const delayed_mask& o) const
@@ -191,6 +194,6 @@ namespace neam::enfield
     }
 
     // we use delayed initialization to allocate the mask as late as possible
-    uint64_t* mask = nullptr;
+    cr::raw_ptr<uint64_t> mask;
   };
 }

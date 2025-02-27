@@ -27,8 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_19625634529221301_2572711997_COMPONENT_HPP__
-#define __N_19625634529221301_2572711997_COMPONENT_HPP__
+#pragma once
+
 
 #include "../attached_object/base_attached_object.hpp"
 #include "../type_id.hpp"
@@ -61,5 +61,5 @@ namespace neam
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_19625634529221301_2572711997_COMPONENT_HPP__
+
 

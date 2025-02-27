@@ -27,8 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_66023502427817558_330010620_ENFIELD_HPP__
-#define __N_66023502427817558_330010620_ENFIELD_HPP__
+#pragma once
+
 
 #include "entity.hpp"
 #include "database.hpp"
@@ -45,5 +45,5 @@ namespace neam
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_66023502427817558_330010620_ENFIELD_HPP__
+
 

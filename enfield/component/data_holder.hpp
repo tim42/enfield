@@ -27,8 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_12776153593207818043_2352923957_DATA_HOLDER_HPP__
-#define __N_12776153593207818043_2352923957_DATA_HOLDER_HPP__
+#pragma once
+
 
 #include "component.hpp"
 #include "../concept/serializable.hpp"
@@ -88,6 +88,6 @@ N_METADATA_STRUCT_TPL(neam::enfield::components::data_holder, DatabaseConf, Data
   >;
 };
 
-#endif // __N_12776153593207818043_2352923957_DATA_HOLDER_HPP__
+
 
 

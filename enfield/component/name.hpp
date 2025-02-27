@@ -27,8 +27,8 @@
 // SOFTWARE.
 //
 
-#ifndef __N_3023961862911828482_116747501_NAME_HPP__
-#define __N_3023961862911828482_116747501_NAME_HPP__
+#pragma once
+
 
 #include "data_holder.hpp"
 
@@ -48,4 +48,4 @@ namespace neam
   } // namespace enfield
 } // namespace neam
 
-#endif // __N_3023961862911828482_116747501_NAME_HPP__
+

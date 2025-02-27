@@ -47,7 +47,7 @@ namespace neam::enfield
       {
         TRACY_SCOPED_ZONE;
         (static_assert_check_attached_object<DatabaseConf, FilterAttachedObjects>(), ...);
-        (static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::user_getable>(), ...);
+        (static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::db_queryable>(), ...);
         std::deque<AttachedObject*> next_result;
 
         for (auto* const it : result)
@@ -74,7 +74,7 @@ namespace neam::enfield
       {
         TRACY_SCOPED_ZONE;
         (static_assert_check_attached_object<DatabaseConf, FilterAttachedObjects>(), ...);
-        (static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::user_getable>(), ...);
+        (static_assert_can<DatabaseConf, FilterAttachedObjects, attached_object_access::db_queryable>(), ...);
 
         std::deque<AttachedObject*> next_result_success;
         std::deque<AttachedObject*> next_result_fail;

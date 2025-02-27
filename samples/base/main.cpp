@@ -148,8 +148,8 @@ class truc : public neam::enfield::component<db_conf, truc>, private printable::
 
 int main(int, char**)
 {
-  neam::cr::out.min_severity = neam::cr::logger::severity::debug;
-  neam::cr::out.register_callback(neam::cr::print_log_to_console, nullptr);
+  neam::cr::get_global_logger().min_severity = neam::cr::logger::severity::debug;
+  neam::cr::get_global_logger().register_callback(neam::cr::print_log_to_console, nullptr);
 
   // create a database using the db_conf configuration
   neam::enfield::database<db_conf> db;
@@ -172,10 +172,14 @@ int main(int, char**)
 
   neam::cr::out().log("has<printable>: {}", entity.has<printable>());
   neam::cr::out().log("has<truc2>: {}", entity.has<truc2>());
+  neam::cr::out().log("has<truc>: {}", entity.has<truc>());
 
   entity.add<truc>();
+  neam::cr::out().log("has<truc2>: {}", entity.has<truc2>());
   entity.add<truc2>();
+  neam::cr::out().log("has<truc2>: {}", entity.has<truc2>());
   entity.remove<truc>();
+  neam::cr::out().log("has<truc2>: {}", entity.has<truc2>());
 
   // Iterate over every printable of the DB.
   // There are no additional cost than running the function the exact number of printable there is in the DB.
@@ -185,6 +189,9 @@ int main(int, char**)
   {
     t.print_all();
   });
+
+  entity.add<truc>();
+  entity.remove<truc2>();
 
   // You can even query multiple attached objects. Only entities with every of those attached objects will be iterated over,
   // so be certain to put the "limiting" attached object first (the rarest attached object)
@@ -200,6 +207,7 @@ int main(int, char**)
 //   const auto query = db.query<printable>().filter<truc2, truc>(neam::enfield::query_condition::any);
 
 //   neam::cr::out().log("{}", query.result.size());
+  neam::cr::out().log("--");
   neam::cr::out().log("has<truc2>: {}", entity.has<truc2>());
   neam::cr::out().log("has<printable>: {}", entity.has<printable>());
 

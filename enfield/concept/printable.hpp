@@ -33,7 +33,6 @@
 #include <ntools/struct_metadata/fmt_support.hpp>
 #include <ntools/ct_list.hpp>
 #include <ntools/type_id.hpp>
-#include <ntools/log_type.hpp>
 
 namespace neam::enfield::concepts
 {
@@ -80,7 +79,7 @@ namespace neam::enfield::concepts
 
           static void print_type(const ConceptProvider& v)
           {
-            cr::log_type::log_type<ConceptProvider>(v);
+            cr::out().log("{}", v);
           }
 
         private:

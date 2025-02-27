@@ -27,8 +27,7 @@
 // SOFTWARE.
 //
 
-#ifndef __N_5648689833718544_32354263_BASE_SYSTEM_HPP__
-#define __N_5648689833718544_32354263_BASE_SYSTEM_HPP__
+#pragma once
 
 #include <string>
 
@@ -129,6 +128,4 @@ namespace neam
     };
   } // namespace enfield
 } // namespace neam
-
-#endif // __N_5648689833718544_32354263_BASE_SYSTEM_HPP__
 

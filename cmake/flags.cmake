@@ -12,7 +12,7 @@ endif()
         set(PROJECT_CXX_FLAGS ${PROJECT_CXX_FLAGS} /std:c++latest)
     else()
         # kdevelop (and probably clang) requires 2b and not 23
-        set(PROJECT_CXX_FLAGS ${PROJECT_CXX_FLAGS} -std=gnu++2b -Wno-invalid-offsetof)
+        set(PROJECT_CXX_FLAGS ${PROJECT_CXX_FLAGS} -std=gnu++2b -Wno-invalid-offsetof -Wno-tautological-compare)
     endif()
 #else()
     # this is the proper way, but kdevelop does not like it

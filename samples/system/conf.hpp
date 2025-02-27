@@ -27,8 +27,7 @@
 // SOFTWARE.
 //
 
-#ifndef __N_2639514542212954497_1694826253_CONF_HPP__
-#define __N_2639514542212954497_1694826253_CONF_HPP__
+#pragma once
 
 #include "enfield/enfield.hpp"
 
@@ -37,5 +36,4 @@ namespace sample
   using db_conf = neam::enfield::db_conf::conservative_eccs;
 } // namespace sample
 
-#endif // __N_2639514542212954497_1694826253_CONF_HPP__
 
